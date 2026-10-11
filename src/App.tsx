@@ -1,7 +1,7 @@
-import "./App.css";
-import "./styles/estilos.css";
 import { ThemeToggle } from "./components/BotonTema";
 import { useEffect, useRef, useState, useCallback } from "react";
+import "./App.css";
+import "./styles/estilos.css";
 
 const WIDTH = 700;
 const HEIGHT = 700;
