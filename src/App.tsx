@@ -1,11 +1,13 @@
 import { ThemeToggle } from "./components/BotonTema";
 import { useEffect, useRef, useState, useCallback } from "react";
+import FpsViewer from "./components/FpsViewer";
 import "./App.css";
 import "./styles/estilos.css";
 
-const WIDTH = 700;
-const HEIGHT = 700;
-const CELL_SIZE = 20;
+
+const WIDTH = 1920;
+const HEIGHT = 1080;
+const CELL_SIZE = 10;
 const NUM_ROWS = WIDTH / CELL_SIZE;
 const NUM_COLS = HEIGHT / CELL_SIZE;
 
@@ -181,6 +183,7 @@ function App() {
     return (
         <>
             <ThemeToggle />
+            <FpsViewer/>
             <div>
                 <h1>{mode === "conway" ? "Conway's Game of Life" : "Seeds"}</h1>
                 <div className="canvas-container">
