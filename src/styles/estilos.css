@@ -46,6 +46,24 @@ canvas{
   background-color: rgb(122, 122, 122);
 }
 
+/* El canvas inferior recibe el ratón; la grilla transparente conserva sus líneas. */
+.board-viewport {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.board-viewport > .canvas {
+  display: block;
+}
+
+.board-grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
 h1, h2 {
   font-family: 'cf';
   font-weight: 100;
