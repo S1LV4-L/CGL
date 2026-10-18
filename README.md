@@ -1,4 +1,30 @@
-# React + TypeScript + Vite
+# Conway's Game of Life
+
+## Cargar y exportar patrones RLE
+
+- **Cargar RLE (.txt)** permite seleccionar archivos `.txt` o `.rle`. La carga
+  pausa la simulación, reemplaza el tablero desde la esquina superior izquierda,
+  reinicia las generaciones y desactiva la mutación. El patrón debe caber en las
+  100 × 100 células del tablero. El límite por archivo es 1 MB.
+- **Exportar RLE (.txt)** descarga `patron-conway.txt` o `patron-seeds.txt` con el
+  estado actual, las dimensiones completas y la regla. Se conservan las posiciones
+  de las células al volver a cargar el archivo.
+- Se admiten comentarios `#`, repeticiones y los símbolos `b` (muerta), `o` (viva),
+  `$` (salto de fila) y `!` (fin). Las reglas admitidas son Conway `B3/S23` y Seeds
+  `B2/S`; una cabecera sin regla usa Conway. Un error de validación conserva el
+  tablero existente y muestra el motivo.
+
+Ejemplo de un glider para guardar como `glider.txt`:
+
+```text
+#N Glider
+x = 3, y = 3, rule = B3/S23
+bo$2bo$3o!
+```
+
+El contenido sigue el [formato RLE de ConwayLife](https://conwaylife.com/wiki/Run_Length_Encoded).
+
+## React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

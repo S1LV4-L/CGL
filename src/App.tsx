@@ -4,24 +4,29 @@ import FpsViewer from "./components/FpsViewer";
 import { createBoardRenderer } from "./rendering/boardRenderer";
 import { createSimulation } from "./simulation/life";
 import type { GameMode } from "./simulation/life";
+import { MAX_RLE_FILE_SIZE, parseRle, serializeRle } from "./simulation/rle";
 import { useCounter } from "./hooks/useCounter";
 import { GenerationCounter } from "./components/GenerationCounter";
 import "./App.css";
 import "./styles/estilos.css";
 
 
-const WIDTH = 1000;
-const HEIGHT = 1000;
+const WIDTH = 14000;
+const HEIGHT = 14000;
 const CELL_SIZE = 10;
 const GRID_WIDTH = WIDTH / CELL_SIZE;
 const GRID_HEIGHT = HEIGHT / CELL_SIZE;
-const renderInterval = 10;
+const renderInterval = 100;
 
 function App() {
     // El tablero pertenece al motor: cambiarlo no necesita renderizar la interfaz de React.
     // Los dos buffers se crean al montar y se reutilizan al avanzar y resetear.
     const simulationRef = useRef<ReturnType<typeof createSimulation> | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [fileError, setFileError] = useState("");
+    const [fileStatus, setFileStatus] = useState("");
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [mode, setMode] = useState<GameMode>("conway");
     const [allowMutation, setAllowMutation] = useState(false); // Ruido aleatorio
     const canvasRef = useRef<null | HTMLCanvasElement>(null);
@@ -89,6 +94,50 @@ function App() {
         setMode((prevMode) => (prevMode === "conway" ? "seeds" : "conway"));
     }
 
+    async function loadRle(event: React.ChangeEvent<HTMLInputElement>) {
+        const file = event.currentTarget.files?.[0];
+        event.currentTarget.value = ""; // Permite volver a seleccionar el mismo archivo.
+        if (!file) return;
+        setIsPlaying(false);
+        isDrawing.current = false;
+        setIsLoading(true);
+        setFileError("");
+        setFileStatus("");
+        try {
+            if (file.size > MAX_RLE_FILE_SIZE) throw new Error("El archivo supera el límite de 1 MB.");
+            const pattern = parseRle(await file.text(), GRID_WIDTH, GRID_HEIGHT);
+            const simulation = simulationRef.current;
+            if (!simulation) return;
+            simulation.reset();
+            simulation.board.set(pattern.board);
+            setMode(pattern.mode);
+            setAllowMutation(false);
+            resetear();
+            renderBoard();
+            setFileStatus(`Patrón cargado: ${file.name} (${pattern.width} × ${pattern.height}).`);
+        } catch (error) {
+            setFileError(error instanceof Error ? error.message : "No se pudo leer el archivo.");
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    function exportRle() {
+        const board = simulationRef.current?.board;
+        if (!board) return;
+        const blob = new Blob([serializeRle(board, GRID_WIDTH, GRID_HEIGHT, mode)], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `patron-${mode}.txt`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setFileError("");
+        setFileStatus("Patrón exportado en formato RLE (.txt).");
+    }
+
     // Función auxiliar para obtener las coordenadas de la celda
     const getCellCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
         const x = Math.floor(e.nativeEvent.offsetX / CELL_SIZE);
@@ -98,6 +147,7 @@ function App() {
     };
 
     const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        if (isLoading) return;
         const coords = getCellCoords(e);
         const simulation = simulationRef.current;
         if (!coords || !simulation) return;
@@ -138,7 +188,7 @@ function App() {
             <div>
                 <h1>{mode === "conway" ? "Conway's Game of Life" : "Seeds"}</h1>
                 <div className="canvas-container">
-                    <div className="button-bar">
+                    <fieldset className="button-bar" disabled={isLoading} aria-label="Controles del tablero">
                         <button onClick={computeNextBoard}>Siguiente</button>
                         <button onClick={resetBoard}>Reset</button>
                         <button onClick={() => setIsPlaying(!isPlaying)}>
@@ -156,7 +206,22 @@ function App() {
                         >
                             Mutación: {allowMutation ? "ON" : "OFF"}
                         </button>
-                    </div>
+                        <button onClick={() => {
+                            setIsPlaying(false);
+                            fileInputRef.current?.click();
+                        }}>Cargar RLE (.txt)</button>
+                        <button onClick={exportRle}>Exportar RLE (.txt)</button>
+                    </fieldset>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".txt,.rle,text/plain"
+                        hidden
+                        aria-label="Archivo de patrón RLE"
+                        onChange={loadRle}
+                    />
+                    {fileError && <p className="error" role="alert">{fileError}</p>}
+                    <p className="file-status" role="status">{isLoading ? "Cargando patrón…" : fileStatus}</p>
 
                     <div className="board-viewport">
                         <canvas

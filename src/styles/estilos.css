@@ -189,11 +189,28 @@ a:hover {
 
 
 .button-bar {
+  border: 0;
+  padding: 0;
+  margin: 0;
   display: flex;
   gap: 0.5rem;
   margin-bottom: 0.625rem;
   flex-wrap: wrap;
   justify-content: center;
+}
+
+input[hidden] {
+  display: none;
+}
+
+.file-status {
+  margin: 0 0 0.625rem;
+  text-align: center;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .btn-mode {
