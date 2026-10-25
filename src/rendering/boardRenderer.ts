@@ -1,99 +1,105 @@
 import type { Board } from "../simulation/life.ts";
 
-/** El renderer solo lee el tablero; nunca modifica los buffers de simulación. */
+const ALIVE = 0xffffffff;
+const DEAD = 0xff000000;
+
 export function createBoardRenderer(
-    canvas: HTMLCanvasElement,
-    gridCanvas: HTMLCanvasElement,
-    columns: number,
-    rows: number,
-    cellSize: number,
+  canvas: HTMLCanvasElement,
+  gridCanvas: HTMLCanvasElement,
+  columns: number,
+  rows: number,
+  cellSize: number,
 ) {
-    const context = canvas.getContext("2d");
-    const gridContext = gridCanvas.getContext("2d");
-    const imageCanvas = document.createElement("canvas");
-    imageCanvas.width = columns;
-    imageCanvas.height = rows;
-    const imageContext = imageCanvas.getContext("2d");
-    if (!context || !gridContext || !imageContext) return null;
+  // El canvas visible mide 1 px por célula; el tamaño en pantalla lo da el CSS.
+  canvas.width = columns;
+  canvas.height = rows;
+  canvas.style.width = `${columns * cellSize}px`;
+  canvas.style.height = `${rows * cellSize}px`;
+  canvas.style.imageRendering = "pixelated";
 
-    // Un píxel RGBA por célula. Se reutiliza la misma imagen en cada generación.
-    const image = imageContext.createImageData(columns, rows);
-    context.imageSmoothingEnabled = false;
+  const context = canvas.getContext("2d", { alpha: false });
+  const gridContext = gridCanvas.getContext("2d");
+  if (!context || !gridContext) return null;
 
-    // Capa transparente estática: las líneas no se vuelven a trazar al editar.
-    gridContext.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
-    gridContext.strokeStyle = "gray";
-    gridContext.lineWidth = 0.1;
+  const total = columns * rows;
+  const width = columns * cellSize;
+  const height = rows * cellSize;
+
+  const image = context.createImageData(columns, rows);
+  const pixels = new Uint32Array(image.data.buffer);
+  pixels.fill(DEAD);
+
+  // Rejilla estática (sin cambios respecto a la versión anterior).
+  gridContext.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+  if (cellSize >= 4) {
+    gridContext.strokeStyle = "rgba(128,128,128,0.35)";
+    gridContext.lineWidth = 1;
     gridContext.beginPath();
     for (let x = 0; x <= columns; x++) {
-        gridContext.moveTo(x * cellSize, 0);
-        gridContext.lineTo(x * cellSize, rows * cellSize);
+      const px = x * cellSize + 0.5;
+      gridContext.moveTo(px, 0);
+      gridContext.lineTo(px, height);
     }
     for (let y = 0; y <= rows; y++) {
-        gridContext.moveTo(0, y * cellSize);
-        gridContext.lineTo(columns * cellSize, y * cellSize);
+      const py = y * cellSize + 0.5;
+      gridContext.moveTo(0, py);
+      gridContext.lineTo(width, py);
     }
     gridContext.stroke();
+  }
 
-    let frameId: number | null = null;
-    let latestBoard: Board | null = null;
-    let needsFullRedraw = false;
-    let disposed = false;
-    const dirtyCells = new Set<number>();
+  let frameId: number | null = null;
+  let latestBoard: Board | null = null;
+  let needsFullRedraw = false;
+  let disposed = false;
+  const dirtyCells = new Set<number>();
 
-    const flush = () => {
-        frameId = null;
-        if (!latestBoard || disposed) return;
+  const flush = () => {
+    frameId = null;
+    if (!latestBoard || disposed) return;
+    const board = latestBoard;
 
-        if (needsFullRedraw) {
-            for (let index = 0; index < columns * rows; index++) {
-                const offset = index * 4;
-                const color = latestBoard[index] === 1 ? 255 : 0;
-                image.data[offset] = color;
-                image.data[offset + 1] = color;
-                image.data[offset + 2] = color;
-                image.data[offset + 3] = 255;
-            }
-            imageContext.putImageData(image, 0, 0);
-            context.drawImage(imageCanvas, 0, 0, columns * cellSize, rows * cellSize);
-        } else {
-            // Durante la edición no recorremos el tablero ni subimos la imagen completa.
-            // La próxima generación reconstruirá ImageData desde el tablero vigente.
-            for (const index of dirtyCells) {
-                const x = index % columns;
-                const y = Math.floor(index / columns);
-                context.fillStyle = latestBoard[index] === 1 ? "white" : "black";
-                context.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-            }
-        }
-
-        needsFullRedraw = false;
-        dirtyCells.clear();
-    };
-
-    function schedule() {
-        // Todos los eventos previos al siguiente cuadro comparten una actualización.
-        if (!disposed && frameId === null) frameId = requestAnimationFrame(flush);
+    if (needsFullRedraw) {
+      for (let i = 0; i < total; i++) {
+        pixels[i] = board[i] === 1 ? ALIVE : DEAD;
+      }
+      // Directo al canvas visible, sin drawImage ni escalado.
+      context.putImageData(image, 0, 0);
+    } else {
+      for (const index of dirtyCells) {
+        const alive = board[index] === 1;
+        pixels[index] = alive ? ALIVE : DEAD;
+        context.fillStyle = alive ? "white" : "black";
+        context.fillRect(index % columns, (index / columns) | 0, 1, 1);
+      }
     }
 
-    return {
-        renderBoard(board: Board) {
-            latestBoard = board;
-            needsFullRedraw = true;
-            dirtyCells.clear();
-            schedule();
-        },
-        renderCell(board: Board, x: number, y: number) {
-            latestBoard = board;
-            if (!needsFullRedraw) dirtyCells.add(y * columns + x);
-            schedule();
-        },
-        dispose() {
-            disposed = true;
-            if (frameId !== null) cancelAnimationFrame(frameId);
-            frameId = null;
-            latestBoard = null;
-            dirtyCells.clear();
-        },
-    };
+    needsFullRedraw = false;
+    dirtyCells.clear();
+  };
+
+  function schedule() {
+    if (!disposed && frameId === null) frameId = requestAnimationFrame(flush);
+  }
+
+  return {
+    renderBoard(board: Board) {
+      latestBoard = board;
+      needsFullRedraw = true;
+      dirtyCells.clear();
+      schedule();
+    },
+    renderCell(board: Board, x: number, y: number) {
+      latestBoard = board;
+      if (!needsFullRedraw) dirtyCells.add(y * columns + x);
+      schedule();
+    },
+    dispose() {
+      disposed = true;
+      if (frameId !== null) cancelAnimationFrame(frameId);
+      frameId = null;
+      latestBoard = null;
+      dirtyCells.clear();
+    },
+  };
 }

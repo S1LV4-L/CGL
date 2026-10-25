@@ -11,12 +11,12 @@ import "./App.css";
 import "./styles/estilos.css";
 
 
-const WIDTH = 14000;
-const HEIGHT = 14000;
-const CELL_SIZE = 10;
+const WIDTH = 5000;
+const HEIGHT = 3000;
+const CELL_SIZE = 5;
 const GRID_WIDTH = WIDTH / CELL_SIZE;
 const GRID_HEIGHT = HEIGHT / CELL_SIZE;
-const renderInterval = 100;
+const renderInterval = 10;
 
 function App() {
     // El tablero pertenece al motor: cambiarlo no necesita renderizar la interfaz de React.
