@@ -9,7 +9,20 @@ test("carga un glider con comentarios, BOM, CRLF y cabecera sin regla", () => {
     assert.equal(result.width, 3);
     assert.equal(result.height, 3);
     assert.deepEqual([...result.board].flatMap((value, i) => value ? [[i % 8, Math.floor(i / 8)]] : []),
-        [[1, 0], [2, 1], [0, 2], [1, 2], [2, 2]]);
+        [[3, 1], [4, 2], [2, 3], [3, 3], [4, 3]]);
+});
+
+test("centra patrones en tableros pares e impares sin recortar ni alterar su forma", () => {
+    for (const [columns, rows, offsetX, offsetY] of [
+        [7, 7, 2, 2], [8, 6, 2, 1], [3, 3, 0, 0], [3, 7, 0, 2], [7, 3, 2, 0],
+    ]) {
+        const { board } = parseRle("x=3,y=3\n2o$bo$2bo!", columns, rows);
+        const expected = new Uint8Array(columns * rows);
+        for (const [x, y] of [[0, 0], [1, 0], [1, 1], [2, 2]]) {
+            expected[(offsetY + y) * columns + offsetX + x] = 1;
+        }
+        assert.deepEqual(board, expected, `${columns} × ${rows}`);
+    }
 });
 
 test("reconoce reglas compatibles y saltos de varias filas", () => {
@@ -25,13 +38,25 @@ test("reconoce reglas compatibles y saltos de varias filas", () => {
 
 test("rechaza archivos inválidos, reglas ajenas y patrones demasiado grandes", () => {
     for (const text of ["", "bo$2bo$3o!", "x=101,y=1\n!", "x=1,y=101\n!",
-        "x=1,y=1,rule=B36/S23\no!", "x=1,y=1\n2o!", "x=1,y=1\n2b!",
+        "x=1,y=1,rule=B9/S23\no!", "x=1,y=1\n2o!", "x=1,y=1\n2b!",
         "x=1,y=1\n$o!", "x=1,y=1\n2$!", "x=1,y=1\n0o!", "x=1,y=1\no",
         "x=1,y=1\nx!", "x=1,y=1\no2!", "x=1,y=1\no!o",
         "x=1,y=1\n999999999999999999999o!", "x=0,y=0\no!"]) {
         assert.throws(() => parseRle(text, 100, 100), Error, text);
     }
     assert.throws(() => parseRle("#".repeat(MAX_RLE_FILE_SIZE + 1), 100, 100), /1 MB/);
+});
+
+test("las reglas personalizadas conservan todos los conteos al exportar y cargar", () => {
+    for (const notation of ["B36/S23", "B012345678/S012345678", "B/S", "B08/S08"]) {
+        const pattern = parseRle(`x=3,y=3,rule=${notation}\nbo$2bo$3o!`, 5, 5);
+        assert.equal(pattern.mode, "custom");
+        const exported = serializeRle(pattern.board, 5, 5, pattern.rules);
+        assert.ok(exported.includes(`rule = ${notation}\n`));
+        const loaded = parseRle(exported, 5, 5);
+        assert.deepEqual(loaded.rules, pattern.rules);
+        assert.deepEqual(loaded.board, pattern.board);
+    }
 });
 
 test("exporta RLE conocido sin desplazar el patrón y omite ceros finales", () => {
@@ -70,6 +95,6 @@ test("el patrón cargado reemplaza ambos buffers y evoluciona con el motor", () 
     simulation.board.set(pattern.board);
     simulation.step(pattern.mode, false);
     const expected = new Uint8Array(8 * 6);
-    for (const y of [0, 1, 2]) expected[y * 8 + 2] = 1;
+    for (const y of [1, 2, 3]) expected[y * 8 + 3] = 1;
     assert.deepEqual(simulation.board, expected);
 });

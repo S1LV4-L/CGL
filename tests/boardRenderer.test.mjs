@@ -3,151 +3,120 @@ import { test } from "node:test";
 import { createBoardRenderer } from "../src/rendering/boardRenderer.ts";
 import { createSimulation } from "../src/simulation/life.ts";
 
-// Canvas y reloj controlados para verificar qué se pinta y cuántas veces,
-// sin depender de la frecuencia de pantalla ni de un navegador instalado.
-function setup(t) {
+function setup(t, columns = 3, rows = 2) {
     const frames = new Map();
-    const calls = { uploads: 0, draws: 0, fills: 0, gridStrokes: 0 };
     let frameId = 0;
-    let uploadedImage;
-    const visible = new Uint8Array(6).fill(2);
-    const imageContext = {
-        createImageData: (width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
-        putImageData(image) { calls.uploads++; uploadedImage = image; },
-    };
+    const pixels = new Uint8Array(30 * 20);
+    const calls = { fills: 0, gridStrokes: 0 };
     const context = {
-        drawImage() {
-            calls.draws++;
-            for (let y = 0; y < 2; y++) {
-                for (let x = 0; x < 3; x++) {
-                    const offset = (y * 3 + x) * 4;
-                    visible[y * 3 + x] = uploadedImage.data[offset] / 255;
-                    assert.equal(uploadedImage.data[offset + 3], 255);
-                }
-            }
-        },
         fillRect(x, y, width, height) {
             calls.fills++;
-            assert.equal(width, 10);
-            assert.equal(height, 10);
-            visible[(y / 10) * 3 + x / 10] = this.fillStyle === "white" ? 1 : 0;
+            for (let py = Math.max(0, Math.floor(y)); py < Math.min(20, Math.ceil(y + height)); py++) {
+                for (let px = Math.max(0, Math.floor(x)); px < Math.min(30, Math.ceil(x + width)); px++) {
+                    pixels[py * 30 + px] = this.fillStyle === "white" ? 1 : 0;
+                }
+            }
         },
     };
     const gridContext = {
         clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {},
         stroke() { calls.gridStrokes++; },
     };
-    const originalGlobals = Object.fromEntries(
-        ["document", "requestAnimationFrame", "cancelAnimationFrame"].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
-    );
+    const originals = Object.fromEntries(["requestAnimationFrame", "cancelAnimationFrame"]
+        .map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
     t.after(() => {
-        for (const [key, descriptor] of Object.entries(originalGlobals)) {
+        for (const [key, descriptor] of Object.entries(originals)) {
             if (descriptor) Object.defineProperty(globalThis, key, descriptor);
             else delete globalThis[key];
         }
     });
-    globalThis.document = { createElement: () => ({ getContext: () => imageContext }) };
     globalThis.requestAnimationFrame = callback => { frames.set(++frameId, callback); return frameId; };
     globalThis.cancelAnimationFrame = id => frames.delete(id);
-    const renderer = createBoardRenderer(
-        { getContext: () => context },
-        { width: 30, height: 20, getContext: () => gridContext },
-        3, 2, 10,
-    );
-    const board = new Uint8Array(6);
+    const canvas = { width: 30, height: 20, getContext: () => context };
+    const grid = { width: 30, height: 20, getContext: () => gridContext };
+    const renderer = createBoardRenderer(canvas, grid, columns, rows, 10);
     const flush = () => {
         const callbacks = [...frames.values()];
         frames.clear();
         callbacks.forEach(callback => callback());
     };
-    return { renderer, board, visible, calls, frames, flush, context };
+    const cells = () => [pixels[5 * 30 + 5], pixels[5 * 30 + 15], pixels[5 * 30 + 25],
+        pixels[15 * 30 + 5], pixels[15 * 30 + 15], pixels[15 * 30 + 25]];
+    return { renderer, pixels, calls, frames, flush, cells, canvas, grid };
 }
 
-test("el dibujo completo respeta los ejes y agrupa solicitudes con el tablero más reciente", t => {
-    const { renderer, board, visible, calls, frames, flush, context } = setup(t);
-    renderer.renderBoard(board);
+test("agrupa generaciones y dibuja el último tablero en las coordenadas correctas", t => {
+    const { renderer, frames, flush, cells, calls } = setup(t);
+    renderer.renderBoard(new Uint8Array(6));
     const latest = new Uint8Array([1, 0, 1, 0, 1, 1]);
     renderer.renderBoard(latest);
     assert.equal(frames.size, 1);
     flush();
-    assert.deepEqual(visible, latest);
-    assert.deepEqual(calls, { uploads: 1, draws: 1, fills: 0, gridStrokes: 1 });
-    assert.equal(context.imageSmoothingEnabled, false);
-});
-
-test("editar pinta solo las células afectadas y combina ediciones repetidas", t => {
-    const { renderer, board, visible, calls, frames, flush } = setup(t);
-    renderer.renderBoard(board);
-    flush();
-    board[1 * 3 + 2] = 1;
-    renderer.renderCell(board, 2, 1);
-    renderer.renderCell(board, 2, 1);
-    board[0 * 3 + 0] = 1;
-    renderer.renderCell(board, 0, 0);
-    assert.equal(frames.size, 1);
-    flush();
-    assert.deepEqual(visible, board);
-    assert.deepEqual(calls, { uploads: 1, draws: 1, fills: 2, gridStrokes: 1 });
-    board[1 * 3 + 2] = 0;
-    renderer.renderCell(board, 2, 1);
-    flush();
-    assert.deepEqual(visible, board);
-});
-
-test("reset o generación reemplazan ediciones pendientes sin pintar células antiguas", t => {
-    const { renderer, board, visible, calls, flush } = setup(t);
-    renderer.renderBoard(board);
-    flush();
-    board[1 * 3 + 1] = 1;
-    renderer.renderCell(board, 1, 1);
-    const reset = new Uint8Array(6);
-    renderer.renderBoard(reset);
-    flush();
-    assert.deepEqual(visible, reset);
-    assert.equal(calls.fills, 0);
-    reset[0 * 3 + 2] = 1;
-    renderer.renderBoard(reset);
-    reset[1 * 3 + 0] = 1;
-    renderer.renderCell(reset, 0, 1);
-    flush();
-    assert.deepEqual(visible, reset);
+    assert.deepEqual(cells(), [...latest]);
     assert.equal(calls.gridStrokes, 1);
 });
 
-test("el dibujo completo incluye ediciones ya visibles y dispose cancela cuadros pendientes", t => {
-    const { renderer, board, visible, frames, calls, flush } = setup(t);
+test("las ediciones y reset se combinan y no dejan células antiguas", t => {
+    const { renderer, frames, flush, cells, calls } = setup(t);
+    const board = new Uint8Array(6);
     renderer.renderBoard(board);
     flush();
-    board[0 * 3 + 2] = 1;
-    renderer.renderCell(board, 2, 0);
+    board[5] = 1;
+    renderer.renderCell(board);
+    renderer.renderCell(board);
+    assert.equal(frames.size, 1);
     flush();
-    renderer.renderBoard(board);
+    assert.deepEqual(cells(), [...board]);
+    renderer.renderCell(board);
+    const reset = new Uint8Array(6);
+    renderer.renderBoard(reset);
     flush();
-    assert.deepEqual(visible, board);
-    renderer.renderBoard(board);
-    renderer.dispose();
-    assert.equal(frames.size, 0);
-    renderer.renderBoard(board);
-    assert.equal(frames.size, 0);
-    assert.equal(calls.draws, 2);
+    assert.deepEqual(cells(), [...reset]);
+    assert.equal(calls.gridStrokes, 1);
 });
 
-test("el cuadro pendiente muestra la última generación aunque los buffers se reutilicen", t => {
-    const { renderer, visible, frames, flush } = setup(t);
+test("pan y zoom redibujan tablero y grilla, ocultándola al alejar", t => {
+    const { renderer, flush, cells, calls } = setup(t);
+    renderer.renderBoard(new Uint8Array([1, 0, 0, 0, 0, 0]));
+    renderer.setView({ x: 0.5, y: 1, scale: 10 });
+    flush();
+    assert.deepEqual(cells(), [0, 1, 0, 0, 0, 0]);
+    renderer.setView({ x: 1.5, y: 1, scale: 5 });
+    flush();
+    assert.equal(calls.gridStrokes, 1);
+    renderer.setView({ x: 1.5, y: 1, scale: 10 });
+    flush();
+    assert.equal(calls.gridStrokes, 2);
+});
+
+test("un tablero enorme solo se lee en su región visible y los canvas no crecen", t => {
+    const { renderer, flush, canvas, grid } = setup(t, 12000, 8000);
+    let reads = 0;
+    const board = new Proxy({}, { get() { reads++; return 0; } });
+    renderer.renderBoard(board);
+    flush();
+    assert.ok(reads <= 12);
+    assert.equal(canvas.width, 30);
+    assert.equal(grid.width, 30);
+    renderer.resize(25, 15);
+    flush();
+    assert.equal(canvas.width, 25);
+    assert.equal(grid.height, 15);
+});
+
+test("respeta los buffers reutilizados y dispose cancela el cuadro pendiente", t => {
+    const { renderer, frames, flush, cells } = setup(t);
     const simulation = createSimulation(3, 2);
     simulation.board.set([0, 1, 1, 1, 0, 0]);
-    renderer.renderBoard(simulation.board);
     for (let step = 0; step < 5; step++) {
         simulation.step("conway", false);
         renderer.renderBoard(simulation.board);
     }
-    simulation.board[2] = 1;
-    renderer.renderCell(simulation.board, 2, 0);
-    assert.equal(frames.size, 1);
     flush();
-    assert.deepEqual(visible, simulation.board);
-    simulation.reset();
+    assert.deepEqual(cells(), [...simulation.board]);
     renderer.renderBoard(simulation.board);
-    flush();
-    assert.deepEqual(visible, new Uint8Array(6));
+    renderer.dispose();
+    assert.equal(frames.size, 0);
+    renderer.renderBoard(simulation.board);
+    assert.equal(frames.size, 0);
 });

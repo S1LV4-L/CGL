@@ -2,8 +2,11 @@ import { ThemeToggle } from "./components/BotonTema";
 import { useEffect, useRef, useState, useCallback } from "react";
 import FpsViewer from "./components/FpsViewer";
 import { createBoardRenderer } from "./rendering/boardRenderer";
-import { createSimulation } from "./simulation/life";
-import type { GameMode } from "./simulation/life";
+import { createSimulation, formatRule, getPresetRule, getRuleMode } from "./simulation/life";
+import { BoardView } from "./components/BoardView";
+import { BoardSettings } from "./components/BoardSettings";
+import { resizeSimulation } from "./simulation/resize";
+import { RulesEditor } from "./components/RulesEditor";
 import { MAX_RLE_FILE_SIZE, parseRle, serializeRle } from "./simulation/rle";
 import { useCounter } from "./hooks/useCounter";
 import { GenerationCounter } from "./components/GenerationCounter";
@@ -11,36 +14,29 @@ import "./App.css";
 import "./styles/estilos.css";
 
 
-const WIDTH = 5000;
-const HEIGHT = 3000;
-const CELL_SIZE = 5;
-const GRID_WIDTH = WIDTH / CELL_SIZE;
-const GRID_HEIGHT = HEIGHT / CELL_SIZE;
-const renderInterval = 10;
+const INITIAL_COLUMNS = 12000;
+const INITIAL_ROWS = 8000;
 
 function App() {
     // El tablero pertenece al motor: cambiarlo no necesita renderizar la interfaz de React.
     // Los dos buffers se crean al montar y se reutilizan al avanzar y resetear.
     const simulationRef = useRef<ReturnType<typeof createSimulation> | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [dimensions, setDimensions] = useState({ columns: INITIAL_COLUMNS, rows: INITIAL_ROWS });
+    const [intervalMs, setIntervalMs] = useState(100);
+    const { columns, rows } = dimensions;
     const [isLoading, setIsLoading] = useState(false);
     const [fileError, setFileError] = useState("");
     const [fileStatus, setFileStatus] = useState("");
     const fileInputRef = useRef<HTMLInputElement | null>(null);
-    const [mode, setMode] = useState<GameMode>("conway");
+    const [rules, setRules] = useState(() => getPresetRule("conway"));
+    const mode = getRuleMode(rules);
+    const [isRulesOpen, setIsRulesOpen] = useState(false);
     const [allowMutation, setAllowMutation] = useState(false); // Ruido aleatorio
-    const canvasRef = useRef<null | HTMLCanvasElement>(null);
-    const gridCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const rendererRef = useRef<ReturnType<typeof createBoardRenderer>>(null);
     
     
     const { count, incrementar, resetear } = useCounter(0);
-
-
-
-    // Se usan refs en vez de estados para no disparar re-renders del componente cada vez que el ratón se mueve.
-    const isDrawing = useRef(false);
-    const drawValue = useRef<0 | 1>(1); // 1 dibujar, 0 borrar
 
     // Se solicita el dibujo; el renderer agrupa las solicitudes en el próximo cuadro.
     const renderBoard = useCallback(() => {
@@ -48,41 +44,24 @@ function App() {
         if (board) rendererRef.current?.renderBoard(board);
     }, []);
 
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        const gridCanvas = gridCanvasRef.current;
-        if (!canvas || !gridCanvas) return;
-
-        const renderer = createBoardRenderer(canvas, gridCanvas, GRID_WIDTH, GRID_HEIGHT, CELL_SIZE);
-        rendererRef.current = renderer;
-        simulationRef.current = createSimulation(GRID_WIDTH, GRID_HEIGHT);
-        renderBoard();
-
-        // También se cancela cualquier cuadro pendiente al desmontar o en StrictMode.
-        return () => {
-            renderer?.dispose();
-            rendererRef.current = null;
-        };
-    }, [renderBoard]);
-
     const computeNextBoard = useCallback(() => {
         const simulation = simulationRef.current;
         if (!simulation) return;
 
-        simulation.step(mode, allowMutation);
+        simulation.step(rules, allowMutation);
         incrementar();
         renderBoard();
-    }, [mode, allowMutation, incrementar, renderBoard]);
+    }, [rules, allowMutation, incrementar, renderBoard]);
 
     useEffect(() => {
         if (!isPlaying) {
             return;
         }
 
-        const interval = setInterval(computeNextBoard, renderInterval);
+        const interval = setInterval(computeNextBoard, intervalMs);
 
         return () => clearInterval(interval);
-    }, [isPlaying, computeNextBoard]);
+    }, [isPlaying, computeNextBoard, intervalMs]);
 
     function resetBoard() {
         simulationRef.current?.reset();
@@ -91,7 +70,7 @@ function App() {
     }
 
     function toggleMode() {
-        setMode((prevMode) => (prevMode === "conway" ? "seeds" : "conway"));
+        setRules(getPresetRule(mode === "conway" ? "seeds" : "conway"));
     }
 
     async function loadRle(event: React.ChangeEvent<HTMLInputElement>) {
@@ -99,18 +78,17 @@ function App() {
         event.currentTarget.value = ""; // Permite volver a seleccionar el mismo archivo.
         if (!file) return;
         setIsPlaying(false);
-        isDrawing.current = false;
         setIsLoading(true);
         setFileError("");
         setFileStatus("");
         try {
             if (file.size > MAX_RLE_FILE_SIZE) throw new Error("El archivo supera el límite de 1 MB.");
-            const pattern = parseRle(await file.text(), GRID_WIDTH, GRID_HEIGHT);
+            const pattern = parseRle(await file.text(), columns, rows);
             const simulation = simulationRef.current;
             if (!simulation) return;
             simulation.reset();
             simulation.board.set(pattern.board);
-            setMode(pattern.mode);
+            setRules(pattern.rules);
             setAllowMutation(false);
             resetear();
             renderBoard();
@@ -125,7 +103,7 @@ function App() {
     function exportRle() {
         const board = simulationRef.current?.board;
         if (!board) return;
-        const blob = new Blob([serializeRle(board, GRID_WIDTH, GRID_HEIGHT, mode)], { type: "text/plain;charset=utf-8" });
+        const blob = new Blob([serializeRle(board, columns, rows, rules)], { type: "text/plain;charset=utf-8" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
@@ -138,55 +116,32 @@ function App() {
         setFileStatus("Patrón exportado en formato RLE (.txt).");
     }
 
-    // Función auxiliar para obtener las coordenadas de la celda
-    const getCellCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
-        const x = Math.floor(e.nativeEvent.offsetX / CELL_SIZE);
-        const y = Math.floor(e.nativeEvent.offsetY / CELL_SIZE);
-        if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) return null; // Validar no salir del tablero
-        return { x, y };
-    };
-
-    const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-        if (isLoading) return;
-        const coords = getCellCoords(e);
-        const simulation = simulationRef.current;
-        if (!coords || !simulation) return;
-        const index = coords.y * GRID_WIDTH + coords.x;
-
-        isDrawing.current = true;
-
-        // Determina si renderizar o borrar en base a la celda actual
-        drawValue.current = simulation.board[index] === 0 ? 1 : 0;
-        simulation.setCell(coords.x, coords.y, drawValue.current);
-        rendererRef.current?.renderCell(simulation.board, coords.x, coords.y);
-    };
-
-    const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-        if (!isDrawing.current) return; // Ignora el movimiento al no hacer click
-
-        const coords = getCellCoords(e);
-        const simulation = simulationRef.current;
-        if (!coords || !simulation) return;
-
-        // Si la celda ya tiene el valor deseado, no se solicita otro dibujo.
-        if (!simulation.setCell(coords.x, coords.y, drawValue.current)) return;
-        rendererRef.current?.renderCell(simulation.board, coords.x, coords.y);
-    };
-
-    const handleMouseUp = () => {
-        isDrawing.current = false; // Deja de dibujar al soltar el botón
-    };
-
-    const handleMouseLeave = () => {
-        isDrawing.current = false; // Si el ratón sale del canvas deja de dibujar para evitar bugs
-    };
+    function applySettings(nextColumns: number, nextRows: number, nextInterval: number) {
+        if (nextColumns !== columns || nextRows !== rows) {
+            const simulation = simulationRef.current;
+            if (!simulation) return;
+            try {
+                const resized = resizeSimulation(simulation.board, columns, rows, nextColumns, nextRows);
+                setIsPlaying(false);
+                simulationRef.current = resized;
+                setDimensions({ columns: nextColumns, rows: nextRows });
+                resetear();
+                setFileError("");
+                setFileStatus(`Tablero redimensionado: ${nextColumns} × ${nextRows}.`);
+            } catch {
+                setFileError("No se pudo reservar memoria para ese tamaño de tablero.");
+                return;
+            }
+        }
+        setIntervalMs(nextInterval);
+    }
 
     return (
         <>
             <ThemeToggle />
             <FpsViewer />
             <div>
-                <h1>{mode === "conway" ? "Conway's Game of Life" : "Seeds"}</h1>
+                <h1>{mode === "conway" ? "Conway's Game of Life" : mode === "seeds" ? "Seeds" : `Reglas personalizadas: ${formatRule(rules)}`}</h1>
                 <div className="canvas-container">
                     <fieldset className="button-bar" disabled={isLoading} aria-label="Controles del tablero">
                         <button onClick={computeNextBoard}>Siguiente</button>
@@ -197,8 +152,12 @@ function App() {
 
                         <button onClick={toggleMode}
                             className={`btn-mode ${mode === "conway" ? "btn-mode-conway" : "btn-mode-seeds"}`}>
-                            Modo: {mode === "conway" ? "Conway" : "Seeds"}
+                            Modo: {mode === "conway" ? "Conway" : mode === "seeds" ? "Seeds" : "Personalizado"}
                         </button>
+                        <button onClick={() => {
+                            setIsPlaying(false);
+                            setIsRulesOpen(true);
+                        }}>Editar reglas</button>
 
                         <button
                             onClick={() => setAllowMutation(!allowMutation)}
@@ -212,6 +171,8 @@ function App() {
                         }}>Cargar RLE (.txt)</button>
                         <button onClick={exportRle}>Exportar RLE (.txt)</button>
                     </fieldset>
+                    <BoardSettings columns={columns} rows={rows} intervalMs={intervalMs}
+                        disabled={isLoading} onApply={applySettings} />
                     <input
                         ref={fileInputRef}
                         type="file"
@@ -223,28 +184,17 @@ function App() {
                     {fileError && <p className="error" role="alert">{fileError}</p>}
                     <p className="file-status" role="status">{isLoading ? "Cargando patrón…" : fileStatus}</p>
 
-                    <div className="board-viewport">
-                        <canvas
-                            onMouseDown={handleMouseDown}
-                            onMouseMove={handleMouseMove}
-                            onMouseUp={handleMouseUp}
-                            onMouseLeave={handleMouseLeave}
-                            ref={canvasRef}
-                            width={WIDTH}
-                            height={HEIGHT}
-                            className="canvas"
-                        />
-                        <canvas
-                            ref={gridCanvasRef}
-                            width={WIDTH}
-                            height={HEIGHT}
-                            className="board-grid"
-                            aria-hidden="true"
-                        />
-                    </div>
+                    <BoardView key={`${columns}x${rows}`} columns={columns} rows={rows}
+                        disabled={isLoading || isRulesOpen} simulationRef={simulationRef} rendererRef={rendererRef} />
                     <GenerationCounter valor={count}/>
                 </div>
             </div>
+            {isRulesOpen && <RulesEditor rules={rules}
+                onClose={() => setIsRulesOpen(false)}
+                onApply={nextRules => {
+                    setRules(nextRules);
+                    setIsRulesOpen(false);
+                }} />}
         </>
     );
 }

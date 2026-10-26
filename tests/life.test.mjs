@@ -1,6 +1,32 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createSimulation } from "../src/simulation/life.ts";
+import { createSimulation, getPresetRule } from "../src/simulation/life.ts";
+
+test("las reglas personalizadas cubren ambos estados y todos los conteos de 0 a 8", () => {
+    const simulation = createSimulation(5, 5);
+    const neighbors = [[1, 1], [2, 1], [3, 1], [1, 2], [3, 2], [1, 3], [2, 3], [3, 3]];
+    for (const alive of [0, 1]) {
+        for (let count = 0; count <= 8; count++) {
+            for (const outcome of [0, 1]) {
+                simulation.reset();
+                simulation.setCell(2, 2, alive);
+                for (const [x, y] of neighbors.slice(0, count)) simulation.setCell(x, y, 1);
+                const rules = new Uint8Array(18).fill(1 - outcome);
+                rules[alive * 9 + count] = outcome;
+                simulation.step(rules, false);
+                assert.equal(simulation.board[12], outcome, `${alive}, ${count} vecinos, resultado ${outcome}`);
+            }
+        }
+    }
+});
+
+test("editar una copia de un preajuste no cambia las reglas predeterminadas", () => {
+    getPresetRule("conway").fill(0);
+    const simulation = createSimulation(5, 5);
+    seed(simulation, 5, [[1, 2], [2, 2], [3, 2]]);
+    simulation.step("conway", false);
+    assert.deepEqual(liveCells(simulation.board, 5), [[2, 1], [2, 2], [2, 3]]);
+});
 
 function seed(simulation, width, cells) {
     assert.equal(simulation.board.length % width, 0);
@@ -118,6 +144,7 @@ function referenceStep(matrix, mode) {
         const right = (x + 1) % width;
         const count = above[left] + above[x] + above[right] + row[left] + row[right]
             + below[left] + below[x] + below[right];
+        if (mode instanceof Uint8Array) return mode[alive * 9 + count];
         return Number(mode === "conway" ? count === 3 || (alive && count === 2) : !alive && count === 2);
     }));
 }
@@ -161,7 +188,7 @@ test("las tablas respetan las 512 configuraciones locales en Conway y Seeds", ()
     }
 });
 
-test("el halo incorpora ediciones en las cuatro esquinas y se refresca después de reset", () => {
+test("los bordes incorporan ediciones en las cuatro esquinas y después de reset", () => {
     const width = 7;
     const height = 5;
     const simulation = createSimulation(width, height);
@@ -179,4 +206,80 @@ test("el halo incorpora ediciones en las cuatro esquinas y se refresca después 
         simulation.step(mode, false);
         assert.ok(simulation.board.every(value => value === 0));
     }
+});
+
+test("reglas personalizadas y ediciones directas coinciden con la referencia en bordes estrechos", () => {
+    const rules = Uint8Array.from([1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1]);
+    for (const [width, height] of [[1, 1], [1, 7], [8, 1], [2, 2], [2, 7], [3, 5], [13, 8]]) {
+        const simulation = createSimulation(width, height);
+        for (let generation = 0; generation < 20; generation++) {
+            // El motor debe leer también cambios que no pasan por setCell.
+            simulation.board[(generation * 7) % simulation.board.length] ^= 1;
+            const matrix = Array.from({ length: height }, (_, y) =>
+                [...simulation.board.subarray(y * width, (y + 1) * width)]);
+            const expected = referenceStep(matrix, rules).flat();
+            simulation.step(rules, false);
+            assert.deepEqual([...simulation.board], expected, `${width}×${height}, generación ${generation}`);
+        }
+    }
+});
+
+test("las teselas conservan patrones que cruzan sus bordes, el toro y franjas estrechas", () => {
+    for (const [width, height] of [[320, 320], [321, 259], [1, 641], [641, 1], [2, 641], [641, 2], [65, 513], [64, 641]]) {
+        for (const [startX, startY] of [[62, 62], [width - 2, height - 2]]) {
+            const simulation = createSimulation(width, height);
+            for (const [x, y] of [[1, 0], [2, 1], [0, 2], [1, 2], [2, 2]]) {
+                simulation.setCell((startX + x) % width, (startY + y) % height, 1);
+            }
+            let expected = Array.from({ length: height }, (_, y) =>
+                [...simulation.board.subarray(y * width, (y + 1) * width)]);
+            for (let generation = 0; generation < 12; generation++) {
+                const rules = generation < 8 ? getPresetRule("conway") : getPresetRule("seeds");
+                expected = referenceStep(expected, rules);
+                simulation.step(rules, false);
+                assert.deepEqual([...simulation.board], expected.flat(), `${width}×${height}, ${startX}/${startY}, ${generation}`);
+            }
+        }
+    }
+});
+
+test("omitir regiones vacías no resucita datos antiguos y detecta ediciones directas lejanas", () => {
+    const width = 512, height = 512;
+    const simulation = createSimulation(width, height);
+    const retired = simulation.board;
+    seed(simulation, width, [[10, 10], [11, 10], [10, 11], [11, 11]]);
+    simulation.step("conway", false);
+    retired.fill(1);
+    simulation.step("conway", false);
+    assert.deepEqual(liveCells(simulation.board, width), [[10, 10], [11, 10], [10, 11], [11, 11]]);
+    simulation.board[400 * width + 400] = 1;
+    simulation.board[400 * width + 401] = 1;
+    simulation.board[401 * width + 400] = 1;
+    simulation.board[401 * width + 401] = 1;
+    simulation.step("conway", false);
+    assert.equal(liveCells(simulation.board, width).length, 8);
+    simulation.reset();
+    simulation.step("conway", false);
+    assert.ok(simulation.board.every(value => value === 0));
+});
+
+test("B0 y mutación cubren todo el tablero y luego pueden volver al recorrido disperso", () => {
+    const width = 320, height = 320;
+    const simulation = createSimulation(width, height);
+    const b0 = new Uint8Array(18);
+    b0[0] = 1;
+    simulation.step(b0, false);
+    assert.ok(simulation.board.every(value => value === 1));
+    simulation.step("conway", false);
+    assert.ok(simulation.board.every(value => value === 0));
+    let calls = 0;
+    simulation.step("conway", true, () => ++calls === width * height ? 0 : 1);
+    assert.equal(calls, width * height);
+    assert.deepEqual(liveCells(simulation.board, width), [[width - 1, height - 1]]);
+    const surviveIsolated = new Uint8Array(18);
+    surviveIsolated[9] = 1;
+    simulation.step(surviveIsolated, false);
+    assert.deepEqual(liveCells(simulation.board, width), [[width - 1, height - 1]]);
+    simulation.step("seeds", false);
+    assert.ok(simulation.board.every(value => value === 0));
 });
