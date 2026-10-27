@@ -1,0 +1,4 @@
+#N Diehard
+#C Methuselah que desaparece por completo tras 130 generaciones.
+x = 8, y = 3, rule = B3/S23
+6bo$2o$bob3o!

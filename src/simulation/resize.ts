@@ -1,8 +1,8 @@
 import { createSimulation } from "./life.ts";
 import type { Board } from "./life.ts";
 
-export const MAX_BOARD_SIDE = 12000;
-export const MAX_BOARD_CELLS = 96000000;
+export const MAX_BOARD_SIDE = 12699;
+export const MAX_BOARD_CELLS = 160667748;
 
 export function validBoardSize(columns: number, rows: number): boolean {
     return Number.isInteger(columns) && Number.isInteger(rows)

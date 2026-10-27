@@ -1,0 +1,4 @@
+#N LWSS
+#C Light-weight spaceship. Nave ortogonal de 9 células, se desplaza a velocidad c/2.
+x = 5, y = 4, rule = B3/S23
+bo2bo$o$o2bo$4o!

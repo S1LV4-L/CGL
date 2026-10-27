@@ -4,18 +4,25 @@ import { createBoardRenderer } from "../rendering/boardRenderer";
 import { fitCamera, MAX_SCALE, MIN_SCALE, screenToCell, zoomAt } from "../rendering/camera";
 import type { Camera } from "../rendering/camera";
 import { createSimulation } from "../simulation/life";
+import { parseRle } from "../simulation/rle";
+
+type Tool = "draw" | "pan" | "stamp";
 
 type Props = {
     columns: number;
     rows: number;
     disabled: boolean;
+    tool: Tool;
+    onToolChange: (tool: Tool) => void;
+    selectedRle: string | null;
+    onOpenLibrary: () => void;
     simulationRef: RefObject<ReturnType<typeof createSimulation> | null>;
     rendererRef: RefObject<ReturnType<typeof createBoardRenderer>>;
 };
 type Gesture = { id: number; kind: "pan" | "draw"; x: number; y: number; value: 0 | 1 };
 const DEFAULT_SCALE = 5;
 
-export function BoardView({ columns, rows, disabled, simulationRef, rendererRef }: Props) {
+export function BoardView({ columns, rows, disabled, tool, onToolChange, selectedRle, onOpenLibrary, simulationRef, rendererRef }: Props) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const gridRef = useRef<HTMLCanvasElement>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
@@ -23,7 +30,6 @@ export function BoardView({ columns, rows, disabled, simulationRef, rendererRef 
     const sizeRef = useRef({ width: 1, height: 1 });
     const gestureRef = useRef<Gesture | null>(null);
     const [scale, setScale] = useState(DEFAULT_SCALE);
-    const [tool, setTool] = useState<"draw" | "pan">("draw");
 
     const updateCamera = useCallback((camera: Camera) => {
         const next = { ...camera, x: Math.max(0, Math.min(columns, camera.x)), y: Math.max(0, Math.min(rows, camera.y)) };
@@ -98,11 +104,48 @@ export function BoardView({ columns, rows, disabled, simulationRef, rendererRef 
         rendererRef.current?.renderCell(simulation.board);
     }
 
+    // Estampa el patrón RLE centrado en (centerX, centerY). Reutiliza parseRle
+    // con el tamaño declarado del patrón y luego copia solo las células vivas
+    // al tablero principal, recortando lo que cae fuera.
+    function stampPattern(rle: string, centerX: number, centerY: number) {
+        const header = /x\s*=\s*(\d+)\s*,\s*y\s*=\s*(\d+)/i.exec(rle);
+        if (!header) return;
+        const patternWidth = Number(header[1]);
+        const patternHeight = Number(header[2]);
+        let result;
+        try {
+            result = parseRle(rle, patternWidth, patternHeight);
+        } catch {
+            return;
+        }
+        const simulation = simulationRef.current;
+        if (!simulation) return;
+        const startX = centerX - Math.floor(patternWidth / 2);
+        const startY = centerY - Math.floor(patternHeight / 2);
+        for (let y = 0; y < patternHeight; y++) {
+            for (let x = 0; x < patternWidth; x++) {
+                if (!result.board[y * patternWidth + x]) continue;
+                const tx = startX + x;
+                const ty = startY + y;
+                if (tx >= 0 && tx < columns && ty >= 0 && ty < rows) {
+                    simulation.setCell(tx, ty, 1);
+                }
+            }
+        }
+        rendererRef.current?.renderCell(simulation.board);
+    }
+
     return (
         <section className="board-navigation" aria-label="Vista del tablero">
             <div className="navigation-bar" role="group" aria-label="Navegación del tablero">
-                <button aria-pressed={tool === "draw"} onClick={() => setTool("draw")}>Dibujar</button>
-                <button aria-pressed={tool === "pan"} onClick={() => setTool("pan")}>Mover</button>
+                <button aria-pressed={tool === "draw"} onClick={() => onToolChange("draw")}>Dibujar</button>
+                <button aria-pressed={tool === "pan"} onClick={() => onToolChange("pan")}>Mover</button>
+                <button
+                    aria-pressed={tool === "stamp"}
+                    onClick={() => (selectedRle ? onToolChange("stamp") : onOpenLibrary())}
+                >
+                    Estampar{selectedRle ? "" : "…"}
+                </button>
                 <button aria-label="Alejar" disabled={scale <= MIN_SCALE} onClick={() => zoom(1 / 1.5)}>−</button>
                 <output aria-label="Zoom">{Number((scale / DEFAULT_SCALE * 100).toFixed(1))}%</output>
                 <button aria-label="Acercar" disabled={scale >= MAX_SCALE} onClick={() => zoom(1.5)}>+</button>
@@ -113,7 +156,10 @@ export function BoardView({ columns, rows, disabled, simulationRef, rendererRef 
                 <button aria-label="Mover vista hacia abajo" onClick={() => pan(0, sizeRef.current.height / 4)}>↓</button>
                 <button aria-label="Mover vista a la derecha" onClick={() => pan(sizeRef.current.width / 4, 0)}>→</button>
             </div>
-            <p id="navigation-help" className="settings-hint">Rueda: zoom · Mover o Mayús + arrastrar: desplazar · Flechas: mover la vista · + / −: zoom · 0: ver todo</p>
+            <p id="navigation-help" className="settings-hint">
+                Rueda: zoom · Mover o Mayús + arrastrar: desplazar · Flechas: mover la vista · + / −: zoom · 0: ver todo
+                {selectedRle && " · Patrón activo: haz clic en el tablero para estampar."}
+            </p>
             <div ref={viewportRef} className="board-viewport">
                 <canvas ref={canvasRef} className={`canvas tool-${tool}`} tabIndex={0}
                     aria-label="Tablero del juego" aria-describedby="navigation-help"
@@ -130,6 +176,15 @@ export function BoardView({ columns, rows, disabled, simulationRef, rendererRef 
                     }}
                     onPointerDown={event => {
                         if (gestureRef.current || (event.button !== 0 && event.button !== 1 && event.button !== 2)) return;
+                        // Modo estampar: un solo clic, sin arrastre ni captura de puntero.
+                        if (tool === "stamp") {
+                            if (!selectedRle || disabled) return;
+                            const cell = cellAt(event);
+                            event.preventDefault();
+                            event.currentTarget.focus({ preventScroll: true });
+                            stampPattern(selectedRle, cell.x, cell.y);
+                            return;
+                        }
                         const isPan = tool === "pan" || event.shiftKey || event.button !== 0;
                         if (!isPan && disabled) return;
                         const cell = cellAt(event);

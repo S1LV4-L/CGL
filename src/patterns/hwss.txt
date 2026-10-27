@@ -1,0 +1,4 @@
+#N HWSS
+#C Heavy-weight spaceship. Nave ortogonal de 13 células, velocidad c/2.
+x = 7, y = 5, rule = B3/S23
+.5bo$o6bo$o6bo$o6bo$2b4obo!

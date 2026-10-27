@@ -1,0 +1,4 @@
+#N R-pentominó
+#C Methuselah que evoluciona durante 1103 generaciones antes de estabilizarse, generando gliders.
+x = 3, y = 3, rule = B3/S23
+b2o$2ob$bo!

@@ -1,0 +1,4 @@
+#N MWSS
+#C Medium-weight spaceship. Nave ortogonal de 11 células, velocidad c/2.
+x = 6, y = 5, rule = B3/S23
+.4o$o5bo$o3b2o$o4bo$2b3o!

@@ -1,0 +1,4 @@
+#N Pulsar
+#C Oscilador de período 3 con 48 células. Una de las estructuras más comunes y estables.
+x = 13, y = 13, rule = B3/S23
+2b3o3b3o2$o4bobo4bo$o4bobo4bo$o4bobo4bo$2b3o3b3o2$2b3o3b3o$o4bobo4bo$o4bobo4bo$o4bobo4bo$2b3o3b3o!

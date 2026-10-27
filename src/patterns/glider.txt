@@ -1,0 +1,4 @@
+#N Glider
+#C La nave más pequeña. Se desplaza 1 célula en diagonal cada 4 generaciones.
+x = 3, y = 3, rule = B3/S23
+bob$2bo$3o!

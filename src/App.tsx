@@ -7,11 +7,14 @@ import { BoardView } from "./components/BoardView";
 import { BoardSettings } from "./components/BoardSettings";
 import { resizeSimulation } from "./simulation/resize";
 import { RulesEditor } from "./components/RulesEditor";
+import { PatternLibrary } from "./components/PatternLibrary";
+import type { Pattern } from "./simulation/patternLibrary";
 import { MAX_RLE_FILE_SIZE, parseRle, serializeRle } from "./simulation/rle";
 import { useCounter } from "./hooks/useCounter";
 import { GenerationCounter } from "./components/GenerationCounter";
 import "./App.css";
 import "./styles/estilos.css";
+import "./styles/pattern-library.css";
 
 
 const INITIAL_COLUMNS = 12000;
@@ -34,8 +37,13 @@ function App() {
     const [isRulesOpen, setIsRulesOpen] = useState(false);
     const [allowMutation, setAllowMutation] = useState(false); // Ruido aleatorio
     const rendererRef = useRef<ReturnType<typeof createBoardRenderer>>(null);
-    
-    
+
+    // Biblioteca de patrones: patrón seleccionado + modal abierto/cerrado.
+    // `tool` se levanta a App para que seleccionar un patrón cambie el modo de un clic.
+    const [selectedPattern, setSelectedPattern] = useState<Pattern | null>(null);
+    const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+    const [tool, setTool] = useState<"draw" | "pan" | "stamp">("draw");
+
     const { count, incrementar, resetear } = useCounter(0);
 
     // Se solicita el dibujo; el renderer agrupa las solicitudes en el próximo cuadro.
@@ -170,6 +178,10 @@ function App() {
                             fileInputRef.current?.click();
                         }}>Cargar RLE (.txt)</button>
                         <button onClick={exportRle}>Exportar RLE (.txt)</button>
+                        <button onClick={() => {
+                            setIsPlaying(false);
+                            setIsLibraryOpen(true);
+                        }}>Biblioteca de patrones</button>
                     </fieldset>
                     <BoardSettings columns={columns} rows={rows} intervalMs={intervalMs}
                         disabled={isLoading} onApply={applySettings} />
@@ -185,7 +197,11 @@ function App() {
                     <p className="file-status" role="status">{isLoading ? "Cargando patrón…" : fileStatus}</p>
 
                     <BoardView key={`${columns}x${rows}`} columns={columns} rows={rows}
-                        disabled={isLoading || isRulesOpen} simulationRef={simulationRef} rendererRef={rendererRef} />
+                        disabled={isLoading || isRulesOpen || isLibraryOpen}
+                        tool={tool} onToolChange={setTool}
+                        selectedRle={selectedPattern?.rle ?? null}
+                        onOpenLibrary={() => setIsLibraryOpen(true)}
+                        simulationRef={simulationRef} rendererRef={rendererRef} />
                     <GenerationCounter valor={count}/>
                 </div>
             </div>
@@ -195,6 +211,16 @@ function App() {
                     setRules(nextRules);
                     setIsRulesOpen(false);
                 }} />}
+            {isLibraryOpen && (
+                <PatternLibrary
+                    onClose={() => setIsLibraryOpen(false)}
+                    onSelect={pattern => {
+                        setSelectedPattern(pattern);
+                        setTool("stamp");
+                        setIsLibraryOpen(false);
+                    }}
+                />
+            )}
         </>
     );
 }
