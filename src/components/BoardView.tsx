@@ -30,6 +30,7 @@ export function BoardView({ columns, rows, disabled, tool, onToolChange, selecte
     const sizeRef = useRef({ width: 1, height: 1 });
     const gestureRef = useRef<Gesture | null>(null);
     const [scale, setScale] = useState(DEFAULT_SCALE);
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
     const updateCamera = useCallback((camera: Camera) => {
         const next = { ...camera, x: Math.max(0, Math.min(columns, camera.x)), y: Math.max(0, Math.min(rows, camera.y)) };
@@ -37,6 +38,25 @@ export function BoardView({ columns, rows, disabled, tool, onToolChange, selecte
         setScale(next.scale);
         rendererRef.current?.setView(next);
     }, [columns, rows, rendererRef]);
+
+    // Sincroniza el estado local con el documento: el usuario puede salir con Esc.
+    useEffect(() => {
+        function onChange() {
+            setIsFullscreen(document.fullscreenElement === viewportRef.current);
+        }
+        document.addEventListener("fullscreenchange", onChange);
+        return () => document.removeEventListener("fullscreenchange", onChange);
+    }, []);
+
+    function toggleFullscreen() {
+        const viewport = viewportRef.current;
+        if (!viewport) return;
+        if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => {});
+        } else {
+            viewport.requestFullscreen().catch(() => {});
+        }
+    }
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -90,7 +110,6 @@ export function BoardView({ columns, rows, disabled, tool, onToolChange, selecte
     function paint(x0: number, y0: number, x1: number, y1: number, value: 0 | 1) {
         const simulation = simulationRef.current;
         if (!simulation) return;
-        // Bresenham evita huecos al arrastrar rápido o con zoom alejado.
         const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
         const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
         let error = dx + dy;
@@ -104,9 +123,6 @@ export function BoardView({ columns, rows, disabled, tool, onToolChange, selecte
         rendererRef.current?.renderCell(simulation.board);
     }
 
-    // Estampa el patrón RLE centrado en (centerX, centerY). Reutiliza parseRle
-    // con el tamaño declarado del patrón y luego copia solo las células vivas
-    // al tablero principal, recortando lo que cae fuera.
     function stampPattern(rle: string, centerX: number, centerY: number) {
         const header = /x\s*=\s*(\d+)\s*,\s*y\s*=\s*(\d+)/i.exec(rle);
         if (!header) return;
@@ -155,9 +171,16 @@ export function BoardView({ columns, rows, disabled, tool, onToolChange, selecte
                 <button aria-label="Mover vista hacia arriba" onClick={() => pan(0, -sizeRef.current.height / 4)}>↑</button>
                 <button aria-label="Mover vista hacia abajo" onClick={() => pan(0, sizeRef.current.height / 4)}>↓</button>
                 <button aria-label="Mover vista a la derecha" onClick={() => pan(sizeRef.current.width / 4, 0)}>→</button>
+                <button
+                    aria-pressed={isFullscreen}
+                    onClick={toggleFullscreen}
+                    title="Pantalla completa (F)"
+                >
+                    {isFullscreen ? "Salir pantalla completa" : "Pantalla completa"}
+                </button>
             </div>
             <p id="navigation-help" className="settings-hint">
-                Rueda: zoom · Mover o Mayús + arrastrar: desplazar · Flechas: mover la vista · + / −: zoom · 0: ver todo
+                Rueda: zoom · Mover o Mayús + arrastrar: desplazar · Flechas: mover la vista · + / −: zoom · 0: ver todo · F: pantalla completa · Esc: salir
                 {selectedRle && " · Patrón activo: haz clic en el tablero para estampar."}
             </p>
             <div ref={viewportRef} className="board-viewport">
@@ -171,12 +194,12 @@ export function BoardView({ columns, rows, disabled, tool, onToolChange, selecte
                             ArrowUp: () => pan(0, -80), ArrowDown: () => pan(0, 80),
                             "+": () => zoom(1.5), "=": () => zoom(1.5), "-": () => zoom(1 / 1.5),
                             "0": () => updateCamera(fitCamera(columns, rows, sizeRef.current)),
+                            "f": () => toggleFullscreen(), "F": () => toggleFullscreen(),
                         };
                         if (actions[event.key]) { event.preventDefault(); actions[event.key](); }
                     }}
                     onPointerDown={event => {
                         if (gestureRef.current || (event.button !== 0 && event.button !== 1 && event.button !== 2)) return;
-                        // Modo estampar: un solo clic, sin arrastre ni captura de puntero.
                         if (tool === "stamp") {
                             if (!selectedRle || disabled) return;
                             const cell = cellAt(event);
@@ -206,7 +229,6 @@ export function BoardView({ columns, rows, disabled, tool, onToolChange, selecte
                             gesture.x = event.clientX; gesture.y = event.clientY;
                         } else if (!disabled) {
                             const cell = cellAt(event);
-                            // Limita el trazo al tablero aunque el puntero capturado salga de la vista.
                             const x = Math.max(0, Math.min(columns - 1, cell.x));
                             const y = Math.max(0, Math.min(rows - 1, cell.y));
                             paint(gesture.x, gesture.y, x, y, gesture.value);
@@ -221,6 +243,16 @@ export function BoardView({ columns, rows, disabled, tool, onToolChange, selecte
                     onPointerCancel={() => { gestureRef.current = null; }}
                     onLostPointerCapture={() => { gestureRef.current = null; }} />
                 <canvas ref={gridRef} className="board-grid" aria-hidden="true" />
+                {isFullscreen && (
+                    <button
+                        className="fullscreen-exit"
+                        onClick={toggleFullscreen}
+                        aria-label="Salir de pantalla completa"
+                        title="Salir de pantalla completa (Esc)"
+                    >
+                        ✕
+                    </button>
+                )}
             </div>
         </section>
     );
