@@ -35,6 +35,7 @@ function App() {
     const [rules, setRules] = useState(() => getPresetRule("conway"));
     const mode = getRuleMode(rules);
     const [isRulesOpen, setIsRulesOpen] = useState(false);
+    const [wrap, setWrap] = useState(true);
     const [allowMutation, setAllowMutation] = useState(false); // Ruido aleatorio
     const rendererRef = useRef<ReturnType<typeof createBoardRenderer>>(null);
 
@@ -56,10 +57,10 @@ function App() {
         const simulation = simulationRef.current;
         if (!simulation) return;
 
-        simulation.step(rules, allowMutation);
+        simulation.step(rules, allowMutation, Math.random, wrap);
         incrementar();
         renderBoard();
-    }, [rules, allowMutation, incrementar, renderBoard]);
+    }, [rules, allowMutation, wrap, incrementar, renderBoard]);
 
     useEffect(() => {
         if (!isPlaying) {
@@ -172,6 +173,10 @@ function App() {
                             className={allowMutation ? "btn-mutation-on" : "btn-mutation-off"}
                         >
                             Mutación: {allowMutation ? "ON" : "OFF"}
+                        </button>
+                        <button onClick={() => setWrap(value => !value)} aria-pressed={wrap}
+                            title="Conectar los bordes opuestos del tablero">
+                            Wrap: {wrap ? "ON" : "OFF"}
                         </button>
                         <button onClick={() => {
                             setIsPlaying(false);
