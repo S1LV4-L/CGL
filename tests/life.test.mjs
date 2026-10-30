@@ -283,3 +283,34 @@ test("B0 y mutación cubren todo el tablero y luego pueden volver al recorrido d
     simulation.step("seeds", false);
     assert.ok(simulation.board.every(value => value === 0));
 });
+
+
+test("wrap puede alternarse y los bordes finitos coinciden con una referencia", () => {
+    for (const [width, height] of [[1, 1], [1, 7], [8, 1], [2, 3], [7, 5], [65, 67]]) {
+        const simulation = createSimulation(width, height);
+        for (let i = 0; i < simulation.board.length; i++) {
+            simulation.board[i] = Number((i * 17 + 3) % 11 < 4);
+        }
+        for (let generation = 0; generation < 24; generation++) {
+            const wrap = generation % 4 >= 2;
+            const rules = getPresetRule(generation % 3 === 0 ? "seeds" : "conway");
+            const before = simulation.board.slice();
+            const expected = before.map((alive, index) => {
+                const x = index % width;
+                const y = Math.floor(index / width);
+                let count = 0;
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        if (dx === 0 && dy === 0) continue;
+                        const nx = x + dx, ny = y + dy;
+                        if (!wrap && (nx < 0 || nx >= width || ny < 0 || ny >= height)) continue;
+                        count += before[((ny + height) % height) * width + (nx + width) % width];
+                    }
+                }
+                return rules[alive * 9 + count];
+            });
+            simulation.step(rules, false, Math.random, wrap);
+            assert.deepEqual(simulation.board, expected, `${width}×${height}, ${generation}, wrap=${wrap}`);
+        }
+    }
+});

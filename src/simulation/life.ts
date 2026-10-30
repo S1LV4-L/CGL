@@ -43,12 +43,17 @@ export function createSimulation(columns: number, rows: number) {
     const dirty = new Uint8Array(tileCount).fill(1);
     const changed = new Uint8Array(tileCount);
     let lastRuleKey = -1;
+    let wrap = true;
 
-    /** Marca la tesela y sus 8 vecinas (con envoltura toroidal). */
+    /** Marca la tesela y sus 8 vecinas según la topología actual. */
     function wake(target: Uint8Array, tx: number, ty: number) {
         for (let dy = -1; dy <= 1; dy++) {
+            if (!wrap && (ty + dy < 0 || ty + dy >= tileRows)) continue;
             const row = ((ty + dy + tileRows) % tileRows) * tileColumns;
-            for (let dx = -1; dx <= 1; dx++) target[row + (tx + dx + tileColumns) % tileColumns] = 1;
+            for (let dx = -1; dx <= 1; dx++) {
+                if (!wrap && (tx + dx < 0 || tx + dx >= tileColumns)) continue;
+                target[row + (tx + dx + tileColumns) % tileColumns] = 1;
+            }
         }
     }
 
@@ -71,6 +76,23 @@ export function createSimulation(columns: number, rows: number) {
         return value ^ alive;
     }
 
+    // Fuera del tablero las células están muertas cuando wrap está desactivado.
+    function updateBoundedEdge(x: number, y: number, rule: Uint8Array) {
+        let neighbors = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+            if (y + dy < 0 || y + dy >= rows) continue;
+            for (let dx = -1; dx <= 1; dx++) {
+                if ((dx === 0 && dy === 0) || x + dx < 0 || x + dx >= columns) continue;
+                neighbors += currentBoard[(y + dy) * columns + x + dx];
+            }
+        }
+        const index = y * columns + x;
+        const alive = currentBoard[index];
+        const value = rule[alive * 9 + neighbors];
+        nextBoard[index] = value;
+        return value ^ alive;
+    }
+
     /** Calcula una región y devuelve distinto de 0 si alguna célula cambió. */
     function updateRegion(left: number, right: number, top: number, bottom: number, rule: Uint8Array) {
         const cur = currentBoard;
@@ -78,10 +100,18 @@ export function createSimulation(columns: number, rows: number) {
         let diff = 0;
         for (let y = top; y < bottom; y++) {
             const row = y * columns;
+            if (!wrap && (y === 0 || y === rows - 1)) {
+                for (let x = left; x < right; x++) diff |= updateBoundedEdge(x, y, rule);
+                continue;
+            }
             let above = y === 0 ? (rows - 1) * columns : row - columns;
             let below = y === rows - 1 ? 0 : row + columns;
-            if (left === 0) diff |= updateEdge(row, above, below, 0, columns - 1, columns === 1 ? 0 : 1, rule);
-            if (right === columns && columns > 1) diff |= updateEdge(row, above, below, columns - 1, columns - 2, 0, rule);
+            if (left === 0) diff |= wrap
+                ? updateEdge(row, above, below, 0, columns - 1, columns === 1 ? 0 : 1, rule)
+                : updateBoundedEdge(0, y, rule);
+            if (right === columns && columns > 1) diff |= wrap
+                ? updateEdge(row, above, below, columns - 1, columns - 2, 0, rule)
+                : updateBoundedEdge(columns - 1, y, rule);
             const startX = Math.max(1, left);
             const endX = Math.min(columns - 1, right);
             if (startX >= endX) continue;
@@ -141,7 +171,11 @@ export function createSimulation(columns: number, rows: number) {
             dirty.fill(1);
         },
 
-        step(mode: GameMode | Uint8Array, allowMutation: boolean, random = Math.random) {
+        step(mode: GameMode | Uint8Array, allowMutation: boolean, random = Math.random, nextWrap = true) {
+            if (wrap !== nextWrap) {
+                wrap = nextWrap;
+                dirty.fill(1);
+            }
             const rule = typeof mode === "string" ? (mode === "conway" ? CONWAY_RULE : SEEDS_RULE) : mode;
 
             // Si cambia la regla, lo que era estable ya no tiene por qué serlo.

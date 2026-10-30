@@ -50,6 +50,7 @@ function App() {
     const [rules, setRules] = useState(() => getPresetRule('conway'));
     const mode = getRuleMode(rules);
     const [isRulesOpen, setIsRulesOpen] = useState(false);
+    const [wrap, setWrap] = useState(true);
     const [allowMutation, setAllowMutation] = useState(false); // Ruido aleatorio
     const [metrics, setMetrics] = useState<Metrics | null>(null);
     const [engine, setEngine] = useState<Engine>('cpu');
@@ -72,7 +73,28 @@ function App() {
         null,
     );
     const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+<<<<<<< HEAD
     const [tool, setTool] = useState<'draw' | 'pan' | 'stamp'>('draw');
+=======
+    const [tool, setTool] = useState<"draw" | "pan" | "stamp">("draw");
+
+    const { count, incrementar, resetear } = useCounter(0);
+
+    // Se solicita el dibujo; el renderer agrupa las solicitudes en el próximo cuadro.
+    const renderBoard = useCallback(() => {
+        const board = simulationRef.current?.board;
+        if (board) rendererRef.current?.renderBoard(board);
+    }, []);
+
+    const computeNextBoard = useCallback(() => {
+        const simulation = simulationRef.current;
+        if (!simulation) return;
+
+        simulation.step(rules, allowMutation, Math.random, wrap);
+        incrementar();
+        renderBoard();
+    }, [rules, allowMutation, wrap, incrementar, renderBoard]);
+>>>>>>> d5ba936e112c6a0ead708adb4cf7ff6d036dab9d
 
     const count = metrics?.generation ?? 0;
     useEffect(() => {
@@ -295,6 +317,22 @@ function App() {
                         >
                             Biblioteca de patrones
                         </button>
+<<<<<<< HEAD
+=======
+                        <button onClick={() => setWrap(value => !value)} aria-pressed={wrap}
+                            title="Conectar los bordes opuestos del tablero">
+                            Wrap: {wrap ? "ON" : "OFF"}
+                        </button>
+                        <button onClick={() => {
+                            setIsPlaying(false);
+                            fileInputRef.current?.click();
+                        }}>Cargar RLE (.txt)</button>
+                        <button onClick={exportRle}>Exportar RLE (.txt)</button>
+                        <button onClick={() => {
+                            setIsPlaying(false);
+                            setIsLibraryOpen(true);
+                        }}>Biblioteca de patrones</button>
+>>>>>>> d5ba936e112c6a0ead708adb4cf7ff6d036dab9d
                     </fieldset>
                     <label className="engine-selector">
                         Motor
