@@ -1,3 +1,44 @@
+## 2026-10-28 — Cadencia de simulación y dibujo separadas
+
+- La reproducción deja de esperar un dibujo GPU por generación. La producción
+  de imágenes continúa en paralelo con la programación de pasos de cálculo.
+- El intervalo entre imágenes se adapta al costo de dibujo: como máximo 30/s y
+  un presupuesto aproximado del 25 % del tiempo para vistas costosas.
+- Se conserva una sola imagen pendiente. Los cambios de motor y las operaciones
+  que modifican el estado esperan al dibujo antes de liberar sus recursos.
+- Una prueba de navegador retrasa cada dibujo GPU 250 ms y comprueba que el
+  cálculo sigue avanzando, que la cadencia se reduce y que editar después de
+  pausar no pierde la actualización visual.
+
+## 2026-10-28 — Controles flotantes y CPU fija
+
+- F funciona desde el tablero, los botones y la página; respeta campos de texto
+  y diálogos. Esc sale de pantalla completa y el foco vuelve al canvas.
+- Los doce botones de navegación flotan en la esquina inferior derecha del canvas,
+  se adaptan a pantallas pequeñas y permanecen visibles en pantalla completa.
+- Se retiran los campos de motor y avances HashLife. El worker de la aplicación
+  ejecuta siempre CPU; GPU y HashLife quedan solo como módulos experimentales.
+- Pruebas de navegador para atajos, posición de controles, vista móvil y CPU fija.
+
+## 2026-10-28 — Motor compacto, worker, WebGPU y HashLife
+
+- Estado a un bit por célula; cálculo paralelo de 32 células con operaciones
+  lógicas. Colas de regiones activas, propagación según bordes y recorrido denso.
+- Worker para cálculo y dibujo; imágenes de la vista con una sola entrega pendiente,
+  hasta 30 cuadros/s y métricas separadas de generaciones, cálculo y dibujo.
+- WebGPU con buffers de 18 MB para 12.000², reglas B/S y sincronización explícita
+  con CPU. Selección automática con alternativa CPU si no hay GPU disponible.
+- HashLife con saltos de potencias de dos, envoltura toroidal rectangular y caché
+  acotada; vuelta al motor normal para patrones caóticos o con mutación.
+- Pirámide incremental de ocupación para zoom lejano y biblioteca cargada al abrir.
+- RLE validado y leído por bloques; exportación con contrapresión y confirmación
+  del cierre de archivo; estados binarios compactos con dimensiones, regla y generación.
+- Restauración de mutación Bernoulli en el motor de referencia. Contrato explícito
+  de invalidación para edición masiva y actualización de pruebas/límites/documentación.
+- Nuevos benchmarks de 12.000² y pruebas reales en Edge para CPU, GPU y archivos.
+
+Mediciones y condiciones: [rendimiento.md](rendimiento.md).
+
 # Registro de cambios
 
 ## 2026-10-16 — Tablero independiente del estado de React

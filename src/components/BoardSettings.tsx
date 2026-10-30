@@ -19,7 +19,7 @@ export function BoardSettings({ columns, rows, intervalMs, disabled, onApply }: 
             const height = Number(data.get("rows"));
             const interval = Number(data.get("interval"));
             if (!validBoardSize(width, height)) {
-                setError("El tablero admite hasta 12.000 células por lado y 96 millones de células en total.");
+                setError("El tablero admite hasta 12.699 células por lado y 160.667.748 células en total.");
                 return;
             }
             if (!Number.isInteger(interval) || interval < 1 || interval > 60000) return;

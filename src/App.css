@@ -182,3 +182,6 @@
     border-right-color: var(--border);
   }
 }
+.performance-metrics { font-size: .85rem; max-width: 1100px; margin: .5rem auto; }
+.engine-selector { display: flex; align-items: center; gap: .5rem; margin: .5rem 0; }
+.engine-selector select { padding: .4rem; }

@@ -109,15 +109,11 @@ export function createSimulation(columns: number, rows: number) {
         return diff;
     }
 
-    // Mutación en O(volteos) en lugar de una llamada a random() por célula.
-    // Se aplica sobre el buffer destino y marca la tesela como cambiada.
+    // Motor de referencia por bytes. Mantiene la semántica Bernoulli histórica;
+    // la aplicación usa PackedLife con muestreo geométrico equivalente.
     function mutate(random: () => number) {
-        const length = nextBoard.length;
-        const expected = length * 0.0001;
-        let flips = Math.floor(expected);
-        if (random() < expected - flips) flips++;
-        for (; flips > 0; flips--) {
-            const index = Math.floor(random() * length);
+        for (let index = 0; index < nextBoard.length; index++) {
+            if (random() >= 0.0001) continue;
             nextBoard[index] ^= 1;
             const y = Math.floor(index / columns);
             const x = index - y * columns;

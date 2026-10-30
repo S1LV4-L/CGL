@@ -49,7 +49,7 @@ canvas{
   background-color: rgb(122, 122, 122);
 }
 
-/* El canvas inferior recibe el ratón; la grilla transparente conserva sus líneas. */
+/* La vista contiene el canvas y los controles flotantes. */
 .board-viewport {
   position: relative;
   width: 100%;
@@ -83,8 +83,39 @@ canvas{
 .board-settings label { margin: 0; font-size: 0.9rem; }
 .board-settings input { width: 10rem; margin: 0.25rem 0 0; }
 .settings-hint { text-align: center; font-size: 0.85rem; line-height: 1.5; margin: 0.75rem 0; }
-.navigation-bar { margin-top: 0.5rem; }
-.navigation-bar button { width: auto; }
+.navigation-bar {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 2;
+  width: max-content;
+  max-width: min(34rem, calc(100% - 1.5rem));
+  max-height: calc(100% - 1.5rem);
+  overflow-y: auto;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  padding: 0.65rem;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid #64748b;
+  border-radius: 0.6rem;
+  box-shadow: 0 0.4rem 1.5rem #0006;
+  backdrop-filter: blur(8px);
+}
+.navigation-bar button {
+  width: auto;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0.35rem 0.55rem;
+  color: #f8fafc;
+  background: #1e293b;
+  border: 1px solid #64748b;
+  border-radius: 0.3rem;
+  box-shadow: none;
+  font-size: 0.8rem;
+}
+.navigation-bar button:hover { background: #334155; }
+.navigation-bar button:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
 .navigation-bar button[aria-pressed="true"] { background: var(--secundario); color: white; }
 .navigation-bar output { min-width: 4.5rem; text-align: center; font-variant-numeric: tabular-nums; }
 
@@ -398,70 +429,15 @@ button:disabled {
   }
 }
 
-/* ===== Pantalla completa (solo el canvas) =====
-   Solo el .board-viewport entra en fullscreen: el canvas rellena la
-   pantalla y la barra de navegación desaparece. Un botón flotante ✕
-   en la esquina superior derecha permite salir sin teclado. */
-
+/* El viewport completo conserva también los controles flotantes. */
 .board-viewport:fullscreen,
 .board-viewport:-webkit-full-screen {
-    width: 100vw;
-    height: 100vh;
-    border-radius: 0;
-    overflow: hidden;
+  width: 100vw;
+  height: 100dvh;
+  border-radius: 0;
 }
-
 .board-viewport:fullscreen .canvas,
 .board-viewport:-webkit-full-screen .canvas {
-    width: 100%;
-    height: 100%;
-}
-
-/* Botón flotante para salir. Solo se renderiza cuando isFullscreen es true
-   (ver BoardView), pero por si entra por atajo de teclado lo dejamos
-   estilizado aquí. */
-.fullscreen-exit {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    z-index: 10;
-    width: 2.25rem;
-    height: 2.25rem;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1rem;
-    line-height: 1;
-    color: white;
-    background-color: rgba(0, 0, 0, 0.55);
-    border: 0.1875rem outset rgba(255, 255, 255, 0.3);
-    box-shadow: 0 0.125rem 0.25rem #0008;
-    border-radius: 0.25rem;
-    cursor: pointer;
-    opacity: 0.4;
-    transition: opacity 0.2s ease, background-color 0.2s ease;
-}
-
-.fullscreen-exit:hover,
-.fullscreen-exit:focus-visible {
-    opacity: 1;
-    background-color: rgba(0, 0, 0, 0.8);
-    outline: none;
-}
-
-.fullscreen-exit:active {
-    border-style: inset;
-    box-shadow: none;
-}
-
-/* En móvil, el botón es un poco más grande para que sea táctil cómodo. */
-@media (max-width: 30em) {
-    .fullscreen-exit {
-        width: 2.75rem;
-        height: 2.75rem;
-        font-size: 1.1rem;
-        opacity: 0.7;
-    }
+  width: 100%;
+  height: 100%;
 }

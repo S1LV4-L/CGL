@@ -1,145 +1,116 @@
 # Conway's Game of Life
 
-## Rendimiento del motor
+Simulación toroidal de Conway, Seeds y reglas B/S personalizadas, preparada para
+12.000 × 12.000 células (144 millones) en el navegador.
 
-El motor divide el tablero en regiones de 64 × 64 células. Sin mutación y sin
-nacimientos con cero vecinos (B0), calcula solo las regiones ocupadas y sus
-vecinas, respetando los bordes toroidales. Si al menos la mitad de las regiones
-está activa, conserva el recorrido continuo con sumas deslizantes; B0 y mutación
-también usan ese recorrido completo.
+## Ejecutar
 
-Para detectar incluso ediciones directas del array público, se busca ocupación
-cada generación y se limpia el buffer destino antes del cálculo disperso. Se
-mantienen los dos buffers del tablero; las listas de regiones añaden unos 118 KB
-para 12000 × 8000. El beneficio es mayor con patrones pequeños en tableros grandes.
+```sh
+npm install
+npm run dev
+```
 
-Comparación con el motor anterior: `npm run bench -- --tiles`. Agregar
-`--sparse --large --no-mutation` mide un glider en el tablero de 12000 × 8000.
+## Motor y rendimiento
+
+**CPU** es el motor inicial y calcula 32 células simultáneamente mediante
+operaciones de bits. El selector **Motor** también permite elegir **GPU (WebGPU)**
+y **Automático**. Automático prueba GPU en tableros de al menos un millón de
+células cuando más de la mitad de las regiones está activa; si GPU no está
+disponible, continúa con CPU. Mantiene listas de regiones activas de 32 × 32
+y solo despierta regiones vecinas cuando un cambio alcanza sus bordes. Cuando
+predomina la actividad, recorre las filas completas y conserva los cambios
+por región para volver al recorrido disperso. No hay campos de avance con HashLife.
+
+El cálculo, el dibujo y la lectura de archivos ocurren en un **Web Worker**.
+React recibe métricas aproximadamente cuatro veces por segundo durante Play.
+Los cuadros se presentan hasta 30 veces por segundo, independientemente de las
+simulaciones. Si dibujar resulta costoso, la cadencia de las vistas se reduce
+para dedicarle aproximadamente un cuarto del tiempo disponible. La reproducción
+GPU continúa calculando mientras se prepara una imagen; pausar, editar o
+cambiar de motor espera su finalización para conservar el estado. Solo se transfiere una imagen de la vista y hay como máximo una
+imagen pendiente. El estado completo permanece en el worker o en GPU.
+
+Los dos estados CPU de 12.000² ocupan **36 MB (34,3 MiB)**. A esto se suman
+listas y máscaras de regiones, unos 12 MB de resúmenes para el zoom, imágenes
+de la vista y, al usar GPU, otros 36 MB de estados GPU. Las cifras de estado no representan la memoria total del navegador. Redimensionar y cargar
+conservan temporalmente estados compactos adicionales para no perder datos
+si la operación falla.
+
+Al alejar la vista, CPU usa una pirámide de ocupación actualizada por cambios,
+en lugar de recorrer 144 millones de células por cuadro. Cada bloque indica
+si contiene alguna célula viva; el dibujo es una agregación visual del patrón.
+Al acercarse se ven las células individuales.
+
+La mutación conserva decisiones Bernoulli independientes con probabilidad
+0,0001 por célula mediante distancias geométricas entre mutaciones. Para
+12.000² se esperan 14.400 mutaciones por generación; esto puede activar gran
+parte del tablero y reducir el beneficio del recorrido disperso.
+
+Las métricas muestran generaciones/s, tiempo de cálculo, tiempo de dibujo y
+regiones activas. Los tiempos de dibujo no incluyen la presentación final del navegador.
+
+Resultados locales y condiciones de medición: [docs/rendimiento.md](docs/rendimiento.md).
 
 ## Configuración y navegación
 
-- **Intervalo (ms)** define el tiempo entre generaciones, entre 1 y 60.000 ms.
-  **Aplicar configuración** actualiza el intervalo incluso durante la reproducción.
-  El tiempo real también depende de lo que tarde en calcularse cada generación.
-- **Columnas** y **Filas** cambian el tamaño en células. Redimensionar pausa el
-  juego, reinicia el contador y conserva la intersección centrada del patrón.
-  Al reducir el tablero se recortan los bordes. Se admiten hasta 12.000 células
-  por lado y 96 millones en total.
-- **Dibujar** permite pintar o borrar. **Mover** permite arrastrar la vista;
-  también funciona Mayús + arrastrar o arrastrar con el botón central o derecho.
-- La rueda y los botones **+ / −** cambian el zoom del tablero. **Ver todo**
-  encaja el tablero y **Centrar · 100%** vuelve al centro con 5 píxeles por célula.
-  Las flechas de la barra desplazan la vista. Con el tablero enfocado, también
-  funcionan las teclas de flecha, **+ / −** y **0** para ver todo.
-- Los canvas tienen el tamaño de la vista y solo se dibuja la región visible;
-  el resto del tablero sigue participando en la simulación.
+- **Intervalo (ms)** fija la separación deseada entre generaciones: 1 a 60.000 ms.
+  El tiempo efectivo depende del cálculo y el dibujo. El valor inicial de
+  100 ms limita la reproducción aproximadamente a diez generaciones/s.
+- **Columnas** y **Filas** admiten hasta 12.699 por lado y 160.667.748 células
+  en total. Cambiar el tamaño pausa, reinicia generaciones y conserva la
+  intersección centrada. Al reducir se recortan los bordes.
+- **Dibujar** pinta o borra con un trazo. **Mover**, Mayús + arrastrar o los
+  botones central/derecho desplazan la vista.
+- La rueda y **+ / −** cambian el zoom; **Ver todo**, **Centrar · 100%** y las
+  flechas permiten navegar. Todos estos controles flotan dentro del canvas,
+  en su esquina inferior derecha, también en pantalla completa.
+- **F** entra o sale de pantalla completa desde el tablero, los botones o la
+  página. **Esc** sale. F no se activa al escribir en campos ni con diálogos
+  abiertos. Con foco en el tablero funcionan flechas, + / − y 0 para ver todo.
 
-## Editar reglas
+## Reglas y patrones
 
-**Editar reglas** pausa el juego y abre un modal con dos columnas: **Sobrevive**
-(célula viva que sigue viva) y **Revive** (célula muerta que pasa a estar viva).
-Cada columna muestra de 0 a 8 vecinos. Una opción sin marcar significa que la
-célula muere o sigue muerta, respectivamente. **Aplicar reglas** conserva el
-tablero y usa la nueva regla en la siguiente generación; **Cancelar** o Escape
-descarta los cambios. Los botones Conway y Seeds recuperan sus reglas
-predefinidas. Las reglas personalizadas también se conservan al exportar y cargar RLE.
+**Editar reglas** pausa y permite elegir supervivencias y nacimientos con
+0 a 8 vecinos. Aplicar conserva el tablero; cancelar descarta los cambios.
+Conway usa B3/S23 y Seeds B2/S. La biblioteca de patrones se carga al abrirla,
+y sus miniaturas se dibujan a partir de los runs RLE sin expandir el tablero.
 
-## Cargar y exportar patrones RLE
+**Cargar patrón o estado** admite `.rle`, `.txt` y `.cgl`:
 
-- **Cargar RLE (.txt)** permite seleccionar archivos `.txt` o `.rle`. La carga
-  pausa la simulación, reemplaza el tablero y centra el patrón según las dimensiones
-  declaradas en su cabecera. Reinicia las generaciones y desactiva la mutación.
-  El patrón debe caber en el tablero. El límite por archivo es 1 MB.
-- **Exportar RLE (.txt)** descarga `patron-conway.txt` o `patron-seeds.txt` con el
-  estado actual, las dimensiones completas y la regla. Se conservan las posiciones
-  de las células al volver a cargar el archivo.
-- Se admiten comentarios `#`, repeticiones y los símbolos `b` (muerta), `o` (viva),
-  `$` (salto de fila) y `!` (fin). Las reglas admitidas son Conway `B3/S23` y Seeds
-  `B2/S`, además de reglas personalizadas B/S con vecinos de 0 a 8; una cabecera sin regla usa Conway. Un error de validación conserva el
-  tablero existente y muestra el motivo.
+- RLE se valida y lee por bloques, con un límite de 256 MiB. El patrón debe
+  caber; se centra, reemplaza el tablero, reinicia generaciones y desactiva
+  mutación. Se admiten comentarios #, repeticiones y b, o, $, !. Una cabecera
+  sin regla usa Conway. Un error conserva el estado anterior.
+- **Exportar RLE** conserva dimensiones y regla. En navegadores con selector
+  de guardado, escribe bloques directamente al archivo con contrapresión,
+  evitando formar una cadena gigante. En otros navegadores descarga un Blob
+  formado por bloques. Un RLE mayor de 256 MiB se rechaza: usá el formato compacto.
+- **Guardar estado compacto** genera `.cgl` con un bit por célula, dimensiones,
+  reglas y generación. El estado de 12.000² ocupa 18.000.048 bytes. Al cargarlo
+  se recuperan también tamaño y generación; la mutación queda desactivada.
 
-Ejemplo de un glider para guardar como `glider.txt`:
+## Validación y benchmarks
 
-```text
-#N Glider
-x = 3, y = 3, rule = B3/S23
-bo$2bo$3o!
+```sh
+npm test
+npm run lint
+npm run build
+npm run test:browser
+npm run bench:large -- --large
+npm run bench:gpu
 ```
 
-El contenido sigue el [formato RLE de ConwayLife](https://conwaylife.com/wiki/Run_Length_Encoded).
+Las pruebas de navegador usan Edge instalado en Windows; en otros sistemas
+requieren Chromium de Playwright. Verifican el tablero CPU de 12.000², F/Esc,
+los controles flotantes en escritorio y móvil, y el guardado y carga de archivos.
+Los módulos y benchmarks de GPU y HashLife se conservan para comparaciones.
+HashLife no se usa en la aplicación. La prueba de
+ese módulo GPU se omite si no hay adaptador disponible.
+Los benchmarks de CPU comparan el motor por bytes de referencia con el motor
+empaquetado y verifican estados completos. Los resultados dependen del patrón,
+equipo y navegador; no son una garantía de FPS.
 
-## React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
-```
-
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
-```
+El motor por bytes de `life.ts` se conserva como referencia y para benchmarks
+históricos (`npm run bench`); la aplicación usa `PackedLife`. Si se modifica
+su array público directamente, se debe llamar `invalidate()`. Los buffers
+retirados no deben modificarse.

@@ -43,8 +43,9 @@ test("redimensionar conserva el patrón centrado, recorta bordes y permite evolu
 
 test("valida dimensiones enteras positivas y limita la memoria total", () => {
     assert.ok(validBoardSize(12000, 8000));
+    assert.ok(validBoardSize(12000, 12000));
     assert.ok(validBoardSize(1, 1));
-    for (const [columns, rows] of [[0, 2], [-1, 2], [2.5, 4], [NaN, 4], [12001, 1], [12000, 12000]]) {
+    for (const [columns, rows] of [[0, 2], [-1, 2], [2.5, 4], [NaN, 4], [12700, 1], [12699, 12699]]) {
         assert.equal(validBoardSize(columns, rows), false);
     }
 });

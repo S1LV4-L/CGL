@@ -1,0 +1,44 @@
+{
+  "node": "v24.19.0",
+  "cpu": "AMD Ryzen 5 4500 6-Core Processor              ",
+  "size": 12000,
+  "samples": 3,
+  "measuredGenerations": "5-9",
+  "mutation": false,
+  "statistic": "median ms/generation; engine only",
+  "results": [
+    {
+      "pattern": "glider",
+      "cases": [
+        {
+          "engine": "byte CPU",
+          "firstMs": 671.0181,
+          "generationMs": 0.629320000000007
+        },
+        {
+          "engine": "packed CPU",
+          "firstMs": 0.233600000000024,
+          "generationMs": 0.0105199999999968
+        }
+      ]
+    },
+    {
+      "pattern": "random-35-percent",
+      "cases": [
+        {
+          "engine": "byte CPU",
+          "firstMs": 732.7846999999965,
+          "generationMs": 714.5693800000001
+        },
+        {
+          "engine": "packed CPU",
+          "firstMs": 232.16500000000087,
+          "generationMs": 231.4031600000002
+        }
+      ]
+    }
+  ],
+  "hash1024Ms": 44.37640000000101,
+  "overviewMs": 112.19079999999667,
+  "stateBytes": 36000000
+}

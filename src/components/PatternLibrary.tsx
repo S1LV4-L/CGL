@@ -1,51 +1,68 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { PATTERNS } from "../simulation/patternLibrary";
-import type { Pattern } from "../simulation/patternLibrary";
-import { parseRle } from "../simulation/rle";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { PATTERNS } from '../simulation/patternLibrary';
+import type { Pattern } from '../simulation/patternLibrary';
+import { inspectRle } from '../simulation/rleStream';
 
 type Props = {
     onClose: () => void;
     onSelect: (pattern: Pattern) => void;
 };
 
-function PatternPreview({ rle, width, height }: { rle: string; width: number; height: number }) {
+function PatternPreview({
+    rle,
+    width,
+    height,
+}: {
+    rle: string;
+    width: number;
+    height: number;
+}) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-        const ctx = canvas.getContext("2d");
+        const ctx = canvas.getContext('2d');
         if (!ctx) return;
         const size = 64;
-        ctx.fillStyle = "#17202a";
+        ctx.fillStyle = '#17202a';
         ctx.fillRect(0, 0, size, size);
         if (!width || !height) return;
         let result;
         try {
-            result = parseRle(rle, width, height);
+            result = inspectRle(rle, width, height);
         } catch {
             return;
         }
         // Escala el patrón para que quepa en el cuadro de previsualización.
-        const cellSize = Math.max(1, Math.floor(Math.min(size / width, size / height)));
+        const cellSize = Math.min(size / width, size / height);
         const px = Math.floor((size - width * cellSize) / 2);
         const py = Math.floor((size - height * cellSize) / 2);
-        ctx.fillStyle = "white";
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                if (result.board[y * width + x]) {
-                    ctx.fillRect(px + x * cellSize, py + y * cellSize, cellSize, cellSize);
-                }
-            }
-        }
+        ctx.fillStyle = 'white';
+        result.visit((x, y, length) =>
+            ctx.fillRect(
+                Math.floor(px + x * cellSize),
+                Math.floor(py + y * cellSize),
+                Math.max(1, Math.ceil(length * cellSize)),
+                Math.max(1, Math.ceil(cellSize)),
+            ),
+        );
     }, [rle, width, height]);
 
-    return <canvas ref={canvasRef} width={64} height={64} aria-hidden="true" className="pattern-preview-canvas" />;
+    return (
+        <canvas
+            ref={canvasRef}
+            width={64}
+            height={64}
+            aria-hidden="true"
+            className="pattern-preview-canvas"
+        />
+    );
 }
 
 export function PatternLibrary({ onClose, onSelect }: Props) {
     const dialogRef = useRef<HTMLDialogElement>(null);
-    const [query, setQuery] = useState("");
+    const [query, setQuery] = useState('');
 
     useEffect(() => {
         const dialog = dialogRef.current;
@@ -56,29 +73,37 @@ export function PatternLibrary({ onClose, onSelect }: Props) {
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
         if (!q) return PATTERNS;
-        return PATTERNS.filter(p =>
-            p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q)
+        return PATTERNS.filter(
+            (p) =>
+                p.name.toLowerCase().includes(q) ||
+                p.description.toLowerCase().includes(q),
         );
     }, [query]);
 
     return (
-        <dialog ref={dialogRef} className="pattern-library" aria-labelledby="pattern-library-title"
-            aria-describedby="pattern-library-description" onCancel={onClose}>
+        <dialog
+            ref={dialogRef}
+            className="pattern-library"
+            aria-labelledby="pattern-library-title"
+            aria-describedby="pattern-library-description"
+            onCancel={onClose}
+        >
             <h2 id="pattern-library-title">Biblioteca de patrones</h2>
             <p id="pattern-library-description">
                 Elige un patrón para estamparlo donde hagas clic en el tablero.
-                Se colocará centrado en el cursor y se dibujará con las reglas actuales.
+                Se colocará centrado en el cursor y se dibujará con las reglas
+                actuales.
             </p>
             <input
                 type="search"
                 className="pattern-search"
                 placeholder="Buscar por nombre o descripción..."
                 value={query}
-                onChange={event => setQuery(event.target.value)}
+                onChange={(event) => setQuery(event.target.value)}
                 aria-label="Buscar patrón"
             />
             <div className="pattern-grid">
-                {filtered.map(pattern => (
+                {filtered.map((pattern) => (
                     <button
                         key={pattern.id}
                         className="pattern-card"
@@ -86,13 +111,21 @@ export function PatternLibrary({ onClose, onSelect }: Props) {
                         aria-label={`Estampar ${pattern.name}, ${pattern.width} × ${pattern.height}`}
                         title={pattern.description}
                     >
-                        <PatternPreview rle={pattern.rle} width={pattern.width} height={pattern.height} />
+                        <PatternPreview
+                            rle={pattern.rle}
+                            width={pattern.width}
+                            height={pattern.height}
+                        />
                         <span className="pattern-name">{pattern.name}</span>
-                        <span className="pattern-size">{pattern.width} × {pattern.height}</span>
+                        <span className="pattern-size">
+                            {pattern.width} × {pattern.height}
+                        </span>
                     </button>
                 ))}
                 {filtered.length === 0 && (
-                    <p className="pattern-empty">Sin coincidencias para "{query}".</p>
+                    <p className="pattern-empty">
+                        Sin coincidencias para "{query}".
+                    </p>
                 )}
             </div>
             <div className="pattern-library-actions">

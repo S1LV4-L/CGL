@@ -1,0 +1,33 @@
+{
+  "available": true,
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+  "adapter": {
+    "vendor": "nvidia",
+    "architecture": "ampere",
+    "description": ""
+  },
+  "size": 12000,
+  "samples": 3,
+  "pattern": "random-35-percent",
+  "mutation": false,
+  "measuredGenerations": "5-9",
+  "firstMedianMs": 16,
+  "generationMedianMs": 3.7400000002235174,
+  "overviewMedianMs": 5.5,
+  "first": [
+    33.59999999962747,
+    16,
+    13
+  ],
+  "warmed": [
+    3.3,
+    3.7400000002235174,
+    3.919999999925494
+  ],
+  "draws": [
+    5.5,
+    5.799999998882413,
+    5.5
+  ],
+  "note": "Browser GPU plus queue synchronization; no per-generation readback; default browser GPU configuration"
+}

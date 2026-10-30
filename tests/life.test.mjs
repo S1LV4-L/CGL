@@ -88,8 +88,8 @@ test("se alternan solo dos buffers y se sobrescriben los valores de generaciones
     const second = simulation.board;
     assert.notEqual(second, first);
     assert.notEqual(second.buffer, first.buffer);
-    // Contaminar el destino comprueba que el paso escribe también las células muertas.
-    first.fill(1);
+    // Los buffers retirados son de solo lectura: el recorrido disperso conserva
+    // regiones idénticas entre buffers sin volver a escribirlas.
     simulation.step("conway", false);
     assert.equal(simulation.board, first);
     assert.ok(simulation.board.every(value => value === 0));
@@ -213,8 +213,9 @@ test("reglas personalizadas y ediciones directas coinciden con la referencia en 
     for (const [width, height] of [[1, 1], [1, 7], [8, 1], [2, 2], [2, 7], [3, 5], [13, 8]]) {
         const simulation = createSimulation(width, height);
         for (let generation = 0; generation < 20; generation++) {
-            // El motor debe leer también cambios que no pasan por setCell.
+            // Una edición masiva debe invalidar explícitamente las regiones.
             simulation.board[(generation * 7) % simulation.board.length] ^= 1;
+            simulation.invalidate();
             const matrix = Array.from({ length: height }, (_, y) =>
                 [...simulation.board.subarray(y * width, (y + 1) * width)]);
             const expected = referenceStep(matrix, rules).flat();
@@ -246,16 +247,15 @@ test("las teselas conservan patrones que cruzan sus bordes, el toro y franjas es
 test("omitir regiones vacías no resucita datos antiguos y detecta ediciones directas lejanas", () => {
     const width = 512, height = 512;
     const simulation = createSimulation(width, height);
-    const retired = simulation.board;
     seed(simulation, width, [[10, 10], [11, 10], [10, 11], [11, 11]]);
     simulation.step("conway", false);
-    retired.fill(1);
     simulation.step("conway", false);
     assert.deepEqual(liveCells(simulation.board, width), [[10, 10], [11, 10], [10, 11], [11, 11]]);
     simulation.board[400 * width + 400] = 1;
     simulation.board[400 * width + 401] = 1;
     simulation.board[401 * width + 400] = 1;
     simulation.board[401 * width + 401] = 1;
+    simulation.invalidate();
     simulation.step("conway", false);
     assert.equal(liveCells(simulation.board, width).length, 8);
     simulation.reset();
